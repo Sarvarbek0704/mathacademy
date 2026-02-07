@@ -1,0 +1,1170 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model academic_years {
+  id          BigInt        @id @default(autoincrement())
+  tenant_id   BigInt
+  name        String
+  start_date  DateTime      @db.Date
+  end_date    DateTime      @db.Date
+  is_current  Boolean       @default(false)
+  created_at  DateTime      @default(now()) @db.Timestamptz(6)
+  tenants     tenants       @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  assessments assessments[]
+  groups      groups[]
+  timetable   timetable[]
+
+  @@unique([tenant_id, name])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model announcements {
+  id                 BigInt    @id @default(autoincrement())
+  tenant_id          BigInt
+  audience           String    @db.VarChar(20)
+  title              String
+  body               String
+  is_published       Boolean   @default(false)
+  published_at       DateTime? @db.Timestamptz(6)
+  created_by_user_id BigInt?
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  users              users?    @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  tenants            tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model assessment_scores {
+  assessment_id      BigInt
+  student_id         BigInt
+  score              Decimal     @db.Decimal(8, 2)
+  teacher_comment    String?
+  entered_by_user_id BigInt?
+  entered_at         DateTime    @default(now()) @db.Timestamptz(6)
+  assessments        assessments @relation(fields: [assessment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users              users?      @relation(fields: [entered_by_user_id], references: [id], onUpdate: NoAction)
+  students           students    @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([assessment_id, student_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model assessments {
+  id                        BigInt               @id @default(autoincrement())
+  tenant_id                 BigInt
+  academic_year_id          BigInt
+  group_id                  BigInt
+  subject_id                BigInt
+  type                      String               @db.VarChar(30)
+  title                     String
+  max_score                 Decimal              @default(100) @db.Decimal(8, 2)
+  weight                    Decimal              @default(1.000) @db.Decimal(6, 3)
+  held_at                   DateTime             @db.Timestamptz(6)
+  created_by_user_id        BigInt?
+  is_published_to_guardians Boolean              @default(false)
+  created_at                DateTime             @default(now()) @db.Timestamptz(6)
+  assessment_scores         assessment_scores[]
+  academic_years            academic_years       @relation(fields: [academic_year_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                     users?               @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  groups                    groups               @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  subjects                  subjects             @relation(fields: [subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants                   tenants              @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  discipline_actions        discipline_actions[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model attendance_marks {
+  session_id          BigInt
+  student_id          BigInt
+  status              String              @db.VarChar(10)
+  note                String?
+  attendance_sessions attendance_sessions @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  students            students            @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([session_id, student_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model attendance_sessions {
+  id                 BigInt             @id @default(autoincrement())
+  tenant_id          BigInt
+  group_id           BigInt
+  session_date       DateTime           @db.Date
+  type               String             @db.VarChar(20)
+  created_by_user_id BigInt?
+  created_at         DateTime           @default(now()) @db.Timestamptz(6)
+  attendance_marks   attendance_marks[]
+  users              users?             @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  groups             groups             @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants            tenants            @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([group_id, session_date, type])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model audit_logs {
+  id                       BigInt            @id @default(autoincrement())
+  tenant_id                BigInt
+  actor_type               String            @db.VarChar(20)
+  actor_user_id            BigInt?
+  actor_student_account_id BigInt?
+  action                   String            @default("OTHER") @db.VarChar(20)
+  entity_type              String
+  entity_id                BigInt?
+  before_data              String?
+  after_data               String?
+  ip_address               String?
+  created_at               DateTime          @default(now()) @db.Timestamptz(6)
+  student_accounts         student_accounts? @relation(fields: [actor_student_account_id], references: [id], onUpdate: NoAction)
+  users                    users?            @relation(fields: [actor_user_id], references: [id], onUpdate: NoAction)
+  tenants                  tenants           @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model auth_attempts {
+  id             BigInt   @id @default(autoincrement())
+  tenant_id      BigInt
+  account_type   String   @db.VarChar(20)
+  username_or_id String
+  success        Boolean
+  ip_address     String?
+  user_agent     String?
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  tenants        tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model auth_locks {
+  id             BigInt   @id @default(autoincrement())
+  tenant_id      BigInt
+  account_type   String   @db.VarChar(20)
+  username_or_id String
+  locked_until   DateTime @db.Timestamptz(6)
+  reason         String?
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  tenants        tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenant_id, account_type, username_or_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model auth_sessions {
+  id                 BigInt    @id @default(autoincrement())
+  tenant_id          BigInt
+  account_type       String    @db.VarChar(20)
+  user_id            BigInt?
+  student_account_id BigInt?
+  refresh_token_hash String
+  device_info        String?
+  ip_address         String?
+  expires_at         DateTime  @db.Timestamptz(6)
+  revoked_at         DateTime? @db.Timestamptz(6)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  tenants            tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users              users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model award_recipients {
+  award_id       BigInt
+  recipient_type String   @db.VarChar(10)
+  student_id     BigInt
+  group_id       BigInt
+  note           String?
+  awards         awards   @relation(fields: [award_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  groups         groups   @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  students       students @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([award_id, recipient_type, student_id, group_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model awards {
+  id                BigInt             @id @default(autoincrement())
+  tenant_id         BigInt
+  award_type        String             @db.VarChar(20)
+  title             String
+  description       String?
+  value_amount      Decimal?           @db.Decimal(12, 2)
+  issued_at         DateTime           @default(now()) @db.Timestamptz(6)
+  issued_by_user_id BigInt?
+  award_recipients  award_recipients[]
+  users             users?             @relation(fields: [issued_by_user_id], references: [id], onUpdate: NoAction)
+  tenants           tenants            @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model campuses {
+  id         BigInt     @id @default(autoincrement())
+  tenant_id  BigInt
+  name       String
+  address    String?
+  lat        Decimal?   @db.Decimal(10, 7)
+  lng        Decimal?   @db.Decimal(10, 7)
+  is_active  Boolean    @default(true)
+  created_at DateTime   @default(now()) @db.Timestamptz(6)
+  tenants    tenants    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  displays   displays[]
+  dorms      dorms[]
+  events     events[]
+  groups     groups[]
+  students   students[]
+}
+
+model certificates {
+  id         BigInt    @id @default(autoincrement())
+  tenant_id  BigInt
+  student_id BigInt
+  title      String
+  subject_id BigInt?
+  issuer     String?
+  score      String?
+  issued_at  DateTime? @db.Date
+  file_id    BigInt?
+  notes      String?
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  files      files?    @relation(fields: [file_id], references: [id], onUpdate: NoAction)
+  students   students  @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  subjects   subjects? @relation(fields: [subject_id], references: [id], onUpdate: NoAction)
+  tenants    tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model cohorts {
+  id              BigInt           @id @default(autoincrement())
+  tenant_id       BigInt
+  label           String
+  graduation_year Int
+  created_at      DateTime         @default(now()) @db.Timestamptz(6)
+  tenants         tenants          @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  student_cohort  student_cohort[]
+
+  @@unique([tenant_id, label])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model competition_entries {
+  id                  BigInt                @id @default(autoincrement())
+  competition_id      BigInt
+  entry_type          String                @db.VarChar(20)
+  student_id          BigInt?
+  group_id            BigInt?
+  name_display        String
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  competitions        competitions          @relation(fields: [competition_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  groups              groups?               @relation(fields: [group_id], references: [id], onUpdate: NoAction)
+  students            students?             @relation(fields: [student_id], references: [id], onUpdate: NoAction)
+  competition_results competition_results[]
+}
+
+model competition_results {
+  competition_id      BigInt
+  entry_id            BigInt
+  rank                Int
+  score               Decimal?            @db.Decimal(12, 2)
+  prize               String?
+  competitions        competitions        @relation(fields: [competition_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  competition_entries competition_entries @relation(fields: [entry_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([competition_id, entry_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model competitions {
+  id                  BigInt                @id @default(autoincrement())
+  tenant_id           BigInt
+  title               String
+  mode                String                @db.VarChar(20)
+  starts_at           DateTime              @db.Timestamptz(6)
+  ends_at             DateTime?             @db.Timestamptz(6)
+  rules               String?
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  competition_entries competition_entries[]
+  competition_results competition_results[]
+  tenants             tenants               @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model discipline_actions {
+  id                    BigInt       @id @default(autoincrement())
+  tenant_id             BigInt
+  student_id            BigInt
+  action_type           String       @db.VarChar(20)
+  reason                String
+  issued_by_user_id     BigInt?
+  issued_at             DateTime     @default(now()) @db.Timestamptz(6)
+  related_assessment_id BigInt?
+  is_active             Boolean      @default(true)
+  users                 users?       @relation(fields: [issued_by_user_id], references: [id], onUpdate: NoAction)
+  assessments           assessments? @relation(fields: [related_assessment_id], references: [id], onUpdate: NoAction)
+  students              students     @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants               tenants      @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  violations            violations[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model display_items {
+  playlist_id       BigInt
+  sort_order        Int
+  item_type         String            @db.VarChar(20)
+  payload           String?
+  display_playlists display_playlists @relation(fields: [playlist_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([playlist_id, sort_order])
+}
+
+model display_playlists {
+  id            BigInt          @id @default(autoincrement())
+  tenant_id     BigInt
+  display_id    BigInt
+  name          String
+  is_default    Boolean         @default(false)
+  display_items display_items[]
+  displays      displays        @relation(fields: [display_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants       tenants         @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model displays {
+  id                BigInt              @id @default(autoincrement())
+  tenant_id         BigInt
+  campus_id         BigInt?
+  name              String
+  location_desc     String?
+  is_active         Boolean             @default(true)
+  display_playlists display_playlists[]
+  campuses          campuses?           @relation(fields: [campus_id], references: [id], onUpdate: NoAction)
+  tenants           tenants             @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model dorm_announcement_prices {
+  dorm_announcement_id       BigInt
+  living_type_id             BigInt
+  price_amount               Decimal                    @db.Decimal(12, 2)
+  currency                   String                     @default("UZS")
+  dorm_payment_announcements dorm_payment_announcements @relation(fields: [dorm_announcement_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  living_types               living_types               @relation(fields: [living_type_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([dorm_announcement_id, living_type_id])
+}
+
+model dorm_billing_months {
+  id                         BigInt                       @id @default(autoincrement())
+  tenant_id                  BigInt
+  month_key                  String
+  month_start                DateTime                     @db.Date
+  month_end                  DateTime                     @db.Date
+  created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  tenants                    tenants                      @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  dorm_payment_announcements dorm_payment_announcements[]
+
+  @@unique([tenant_id, month_key])
+}
+
+model dorm_payment_announcements {
+  id                       BigInt                     @id @default(autoincrement())
+  tenant_id                BigInt
+  dorm_month_id            BigInt
+  title                    String
+  message                  String?
+  due_date                 DateTime?                  @db.Date
+  is_published             Boolean                    @default(false)
+  published_at             DateTime?                  @db.Timestamptz(6)
+  created_by_user_id       BigInt?
+  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  dorm_announcement_prices dorm_announcement_prices[]
+  users                    users?                     @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  dorm_billing_months      dorm_billing_months        @relation(fields: [dorm_month_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants                  tenants                    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  dorm_student_charges     dorm_student_charges[]
+
+  @@unique([tenant_id, dorm_month_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model dorm_rooms {
+  id                       BigInt                     @id @default(autoincrement())
+  dorm_id                  BigInt
+  room_code                String
+  capacity                 Int                        @default(1)
+  gender_policy            String?
+  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  dorms                    dorms                      @relation(fields: [dorm_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  student_room_assignments student_room_assignments[]
+
+  @@unique([dorm_id, room_code])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model dorm_student_charges {
+  id                         BigInt                     @id @default(autoincrement())
+  tenant_id                  BigInt
+  dorm_announcement_id       BigInt
+  student_id                 BigInt
+  living_type_id             BigInt
+  amount                     Decimal                    @db.Decimal(12, 2)
+  currency                   String                     @default("UZS")
+  status                     String                     @default("PENDING")
+  invoice_id                 BigInt?
+  note                       String?
+  created_at                 DateTime                   @default(now()) @db.Timestamptz(6)
+  dorm_payment_announcements dorm_payment_announcements @relation(fields: [dorm_announcement_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  invoices                   invoices?                  @relation(fields: [invoice_id], references: [id], onUpdate: NoAction)
+  living_types               living_types               @relation(fields: [living_type_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  students                   students                   @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants                    tenants                    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([dorm_announcement_id, student_id])
+}
+
+model dorms {
+  id          BigInt       @id @default(autoincrement())
+  tenant_id   BigInt
+  campus_id   BigInt?
+  name        String
+  description String?
+  is_active   Boolean      @default(true)
+  created_at  DateTime     @default(now()) @db.Timestamptz(6)
+  dorm_rooms  dorm_rooms[]
+  campuses    campuses?    @relation(fields: [campus_id], references: [id], onUpdate: NoAction)
+  tenants     tenants      @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model event_participants {
+  event_id   BigInt
+  student_id BigInt
+  role       String   @default("PARTICIPANT")
+  events     events   @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  students   students @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([event_id, student_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model events {
+  id                 BigInt               @id @default(autoincrement())
+  tenant_id          BigInt
+  campus_id          BigInt?
+  title              String
+  event_type         String               @default("OTHER") @db.VarChar(20)
+  starts_at          DateTime             @db.Timestamptz(6)
+  ends_at            DateTime?            @db.Timestamptz(6)
+  description        String?
+  created_by_user_id BigInt?
+  created_at         DateTime             @default(now()) @db.Timestamptz(6)
+  event_participants event_participants[]
+  campuses           campuses?            @relation(fields: [campus_id], references: [id], onUpdate: NoAction)
+  users              users?               @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  tenants            tenants              @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model files {
+  id                  BigInt         @id @default(autoincrement())
+  tenant_id           BigInt
+  owner_type          String
+  owner_id            BigInt?
+  file_name           String
+  mime_type           String?
+  size_bytes          BigInt?
+  url                 String
+  uploaded_by_user_id BigInt?
+  created_at          DateTime       @default(now()) @db.Timestamptz(6)
+  certificates        certificates[]
+  tenants             tenants        @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users               users?         @relation(fields: [uploaded_by_user_id], references: [id], onUpdate: NoAction)
+  violations          violations[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model grade_snapshot_rows {
+  snapshot_id     BigInt
+  student_id      BigInt
+  total_score     Decimal         @db.Decimal(12, 2)
+  rank            Int
+  risk_level      String          @default("GREEN") @db.VarChar(10)
+  grade_snapshots grade_snapshots @relation(fields: [snapshot_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  students        students        @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([snapshot_id, student_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model grade_snapshots {
+  id                  BigInt                @id @default(autoincrement())
+  tenant_id           BigInt
+  group_id            BigInt
+  period_type         String                @db.VarChar(10)
+  period_start        DateTime              @db.Date
+  period_end          DateTime              @db.Date
+  generated_at        DateTime              @default(now()) @db.Timestamptz(6)
+  grade_snapshot_rows grade_snapshot_rows[]
+  groups              groups                @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants             tenants               @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model group_subjects {
+  group_id   BigInt
+  subject_id BigInt
+  groups     groups   @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  subjects   subjects @relation(fields: [subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([group_id, subject_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model groups {
+  id                    BigInt                  @id @default(autoincrement())
+  tenant_id             BigInt
+  campus_id             BigInt?
+  academic_year_id      BigInt
+  track_id              BigInt?
+  name                  String
+  grade                 Int                     @db.SmallInt
+  curator_user_id       BigInt?
+  created_at            DateTime                @default(now()) @db.Timestamptz(6)
+  assessments           assessments[]
+  attendance_sessions   attendance_sessions[]
+  award_recipients      award_recipients[]
+  competition_entries   competition_entries[]
+  grade_snapshots       grade_snapshots[]
+  group_subjects        group_subjects[]
+  academic_years        academic_years          @relation(fields: [academic_year_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  campuses              campuses?               @relation(fields: [campus_id], references: [id], onUpdate: NoAction)
+  users                 users?                  @relation(fields: [curator_user_id], references: [id], onUpdate: NoAction)
+  tenants               tenants                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  student_tracks        student_tracks?         @relation(fields: [track_id], references: [id], onUpdate: NoAction)
+  student_group_history student_group_history[]
+  students              students[]
+  timetable             timetable[]
+
+  @@unique([tenant_id, academic_year_id, name])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model invoices {
+  id                   BigInt                 @id @default(autoincrement())
+  tenant_id            BigInt
+  student_id           BigInt
+  type                 String                 @db.VarChar(10)
+  period_start         DateTime?              @db.Date
+  period_end           DateTime?              @db.Date
+  amount               Decimal                @db.Decimal(12, 2)
+  currency             String                 @default("UZS")
+  status               String                 @default("PENDING") @db.VarChar(20)
+  due_date             DateTime?              @db.Date
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  created_by_user_id   BigInt?
+  dorm_student_charges dorm_student_charges[]
+  users                users?                 @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  students             students               @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants              tenants                @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  meal_student_charges meal_student_charges[]
+  payments             payments[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model leave_requests {
+  id                  BigInt    @id @default(autoincrement())
+  tenant_id           BigInt
+  student_id          BigInt
+  requested_by        String    @default("STUDENT_VERBAL") @db.VarChar(20)
+  reason              String
+  start_at            DateTime  @db.Timestamptz(6)
+  end_at              DateTime  @db.Timestamptz(6)
+  status              String    @default("PENDING") @db.VarChar(20)
+  approved_by_user_id BigInt?
+  approved_at         DateTime? @db.Timestamptz(6)
+  closed_at           DateTime? @db.Timestamptz(6)
+  notes               String?
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  users               users?    @relation(fields: [approved_by_user_id], references: [id], onUpdate: NoAction)
+  students            students  @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants             tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model living_types {
+  id                       BigInt                     @id @default(autoincrement())
+  tenant_id                BigInt
+  code                     String
+  name                     String
+  description              String?
+  is_active                Boolean                    @default(true)
+  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  dorm_announcement_prices dorm_announcement_prices[]
+  dorm_student_charges     dorm_student_charges[]
+  tenants                  tenants                    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  meal_announcement_prices meal_announcement_prices[]
+  meal_student_charges     meal_student_charges[]
+  student_living_history   student_living_history[]
+  students                 students[]
+
+  @@unique([tenant_id, code])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model meal_announcement_prices {
+  meal_announcement_id       BigInt
+  living_type_id             BigInt
+  price_amount               Decimal                    @db.Decimal(12, 2)
+  currency                   String                     @default("UZS")
+  living_types               living_types               @relation(fields: [living_type_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  meal_payment_announcements meal_payment_announcements @relation(fields: [meal_announcement_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([meal_announcement_id, living_type_id])
+}
+
+model meal_payment_announcements {
+  id                       BigInt                     @id @default(autoincrement())
+  tenant_id                BigInt
+  meal_week_id             BigInt
+  title                    String
+  message                  String?
+  due_date                 DateTime?                  @db.Date
+  is_published             Boolean                    @default(false)
+  published_at             DateTime?                  @db.Timestamptz(6)
+  created_by_user_id       BigInt?
+  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  meal_announcement_prices meal_announcement_prices[]
+  users                    users?                     @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  meal_weeks               meal_weeks                 @relation(fields: [meal_week_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants                  tenants                    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  meal_student_charges     meal_student_charges[]
+
+  @@unique([tenant_id, meal_week_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model meal_student_charges {
+  id                         BigInt                     @id @default(autoincrement())
+  tenant_id                  BigInt
+  meal_announcement_id       BigInt
+  student_id                 BigInt
+  living_type_id             BigInt
+  amount                     Decimal                    @db.Decimal(12, 2)
+  currency                   String                     @default("UZS")
+  status                     String                     @default("PENDING")
+  invoice_id                 BigInt?
+  note                       String?
+  created_at                 DateTime                   @default(now()) @db.Timestamptz(6)
+  invoices                   invoices?                  @relation(fields: [invoice_id], references: [id], onUpdate: NoAction)
+  living_types               living_types               @relation(fields: [living_type_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  meal_payment_announcements meal_payment_announcements @relation(fields: [meal_announcement_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  students                   students                   @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants                    tenants                    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([meal_announcement_id, student_id])
+}
+
+model meal_weeks {
+  id                         BigInt                       @id @default(autoincrement())
+  tenant_id                  BigInt
+  week_key                   String
+  week_start                 DateTime                     @db.Date
+  week_end                   DateTime                     @db.Date
+  created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  meal_payment_announcements meal_payment_announcements[]
+  tenants                    tenants                      @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenant_id, week_key])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model notification_preferences {
+  id                 BigInt            @id @default(autoincrement())
+  tenant_id          BigInt
+  account_type       String            @db.VarChar(20)
+  user_id            BigInt?
+  student_account_id BigInt?
+  in_app_enabled     Boolean           @default(true)
+  telegram_enabled   Boolean           @default(false)
+  sms_enabled        Boolean           @default(false)
+  telegram_chat_id   String?
+  sms_phone          String?
+  created_at         DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime          @default(now()) @db.Timestamptz(6)
+  student_accounts   student_accounts? @relation(fields: [student_account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants            tenants           @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users              users?            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenant_id, account_type, user_id, student_account_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model notification_templates {
+  id         BigInt   @id @default(autoincrement())
+  tenant_id  BigInt
+  code       String
+  channel    String   @db.VarChar(10)
+  title      String
+  body       String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  tenants    tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenant_id, code, channel])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model notifications {
+  id                 BigInt            @id @default(autoincrement())
+  tenant_id          BigInt
+  channel            String            @db.VarChar(10)
+  status             String            @default("QUEUED") @db.VarChar(10)
+  title              String
+  body               String
+  recipient_user_id  BigInt?
+  student_account_id BigInt?
+  related_entity     String?
+  created_at         DateTime          @default(now()) @db.Timestamptz(6)
+  sent_at            DateTime?         @db.Timestamptz(6)
+  users              users?            @relation(fields: [recipient_user_id], references: [id], onUpdate: NoAction)
+  student_accounts   student_accounts? @relation(fields: [student_account_id], references: [id], onUpdate: NoAction)
+  tenants            tenants           @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payments {
+  id                                        BigInt   @id @default(autoincrement())
+  tenant_id                                 BigInt
+  invoice_id                                BigInt
+  source                                    String   @default("MANUAL") @db.VarChar(10)
+  paid_amount                               Decimal  @db.Decimal(12, 2)
+  paid_at                                   DateTime @default(now()) @db.Timestamptz(6)
+  method                                    String   @default("CASH") @db.VarChar(10)
+  reference                                 String?
+  created_by_user_id                        BigInt?
+  received_by_user_id                       BigInt?
+  users_payments_created_by_user_idTousers  users?   @relation("payments_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  invoices                                  invoices @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_payments_received_by_user_idTousers users?   @relation("payments_received_by_user_idTousers", fields: [received_by_user_id], references: [id], onUpdate: NoAction)
+  tenants                                   tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model permissions {
+  id               BigInt             @id @default(autoincrement())
+  code             String             @unique
+  description      String?
+  role_permissions role_permissions[]
+}
+
+model role_permissions {
+  role_id       BigInt
+  permission_id BigInt
+  permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  roles         roles       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([role_id, permission_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model roles {
+  id               BigInt             @id @default(autoincrement())
+  tenant_id        BigInt
+  name             String
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  role_permissions role_permissions[]
+  tenants          tenants            @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user_roles       user_roles[]
+
+  @@unique([tenant_id, name])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model student_accounts {
+  id                       BigInt                     @id @default(autoincrement())
+  tenant_id                BigInt
+  student_id               BigInt                     @unique
+  student_login_id         String
+  password_hash            String
+  must_change_password     Boolean                    @default(true)
+  password_changed_at      DateTime?                  @db.Timestamptz(6)
+  is_active                Boolean                    @default(true)
+  profile_full_name        String?
+  profile_phone            String?
+  profile_relation         String?
+  telegram_username        String?
+  telegram_chat_id         String?
+  profile_completed_at     DateTime?                  @db.Timestamptz(6)
+  created_by_user_id       BigInt?
+  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  last_login_at            DateTime?                  @db.Timestamptz(6)
+  audit_logs               audit_logs[]
+  notification_preferences notification_preferences[]
+  notifications            notifications[]
+  users                    users?                     @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  students                 students                   @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants                  tenants                    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenant_id, student_login_id])
+}
+
+model student_cohort {
+  student_id          BigInt   @id
+  cohort_id           BigInt
+  assigned_at         DateTime @default(now()) @db.Timestamptz(6)
+  assigned_by_user_id BigInt?
+  users               users?   @relation(fields: [assigned_by_user_id], references: [id], onUpdate: NoAction)
+  cohorts             cohorts  @relation(fields: [cohort_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  students            students @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model student_group_history {
+  id                 BigInt    @id @default(autoincrement())
+  tenant_id          BigInt
+  student_id         BigInt
+  group_id           BigInt
+  start_date         DateTime  @db.Date
+  end_date           DateTime? @db.Date
+  changed_by_user_id BigInt?
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  users              users?    @relation(fields: [changed_by_user_id], references: [id], onUpdate: NoAction)
+  groups             groups    @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  students           students  @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants            tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model student_id_sequences {
+  id         BigInt   @id @default(autoincrement())
+  tenant_id  BigInt   @unique
+  last_seq   Int      @default(0)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  tenants    tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model student_living_history {
+  id                 BigInt       @id @default(autoincrement())
+  tenant_id          BigInt
+  student_id         BigInt
+  living_type_id     BigInt
+  start_date         DateTime     @db.Date
+  end_date           DateTime?    @db.Date
+  changed_by_user_id BigInt?
+  note               String?
+  created_at         DateTime     @default(now()) @db.Timestamptz(6)
+  users              users?       @relation(fields: [changed_by_user_id], references: [id], onUpdate: NoAction)
+  living_types       living_types @relation(fields: [living_type_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  students           students     @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants            tenants      @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model student_outcomes {
+  id                 BigInt    @id @default(autoincrement())
+  tenant_id          BigInt
+  student_id         BigInt    @unique
+  outcome_status     String    @default("UNKNOWN") @db.VarChar(30)
+  institution_name   String?
+  faculty_or_program String?
+  decision_date      DateTime? @db.Date
+  source             String?
+  notes              String?
+  created_by_user_id BigInt?
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  users              users?    @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  students           students  @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants            tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model student_risk_scores {
+  id            BigInt   @id @default(autoincrement())
+  tenant_id     BigInt
+  student_id    BigInt
+  calculated_at DateTime @default(now()) @db.Timestamptz(6)
+  score         Int
+  level         String   @db.VarChar(10)
+  signals       String?
+  note          String?
+  students      students @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants       tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model student_room_assignments {
+  id                  BigInt     @id @default(autoincrement())
+  tenant_id           BigInt
+  student_id          BigInt
+  room_id             BigInt
+  start_date          DateTime   @db.Date
+  end_date            DateTime?  @db.Date
+  assigned_by_user_id BigInt?
+  note                String?
+  created_at          DateTime   @default(now()) @db.Timestamptz(6)
+  users               users?     @relation(fields: [assigned_by_user_id], references: [id], onUpdate: NoAction)
+  dorm_rooms          dorm_rooms @relation(fields: [room_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  students            students   @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants             tenants    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model student_timeline {
+  id                 BigInt   @id @default(autoincrement())
+  tenant_id          BigInt
+  student_id         BigInt
+  event_type         String
+  title              String
+  details            String?
+  created_by_user_id BigInt?
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+  users              users?   @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  students           students @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants            tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model student_tracks {
+  id          BigInt     @id @default(autoincrement())
+  tenant_id   BigInt
+  name        String
+  description String?
+  created_at  DateTime   @default(now()) @db.Timestamptz(6)
+  groups      groups[]
+  tenants     tenants    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  students    students[]
+
+  @@unique([tenant_id, name])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model students {
+  id                       BigInt                     @id @default(autoincrement())
+  tenant_id                BigInt
+  campus_id                BigInt?
+  current_group_id         BigInt?
+  track_id                 BigInt?
+  living_type_id           BigInt?
+  full_name                String
+  gender                   String?
+  birth_date               DateTime?                  @db.Date
+  admission_grade          Int                        @db.SmallInt
+  admission_date           DateTime                   @db.Date
+  expected_graduation_year Int
+  status                   String                     @default("ACTIVE") @db.VarChar(20)
+  status_changed_at        DateTime?                  @db.Timestamptz(6)
+  archived_at              DateTime?                  @db.Timestamptz(6)
+  notes                    String?
+  created_by_user_id       BigInt?
+  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  assessment_scores        assessment_scores[]
+  attendance_marks         attendance_marks[]
+  award_recipients         award_recipients[]
+  certificates             certificates[]
+  competition_entries      competition_entries[]
+  discipline_actions       discipline_actions[]
+  dorm_student_charges     dorm_student_charges[]
+  event_participants       event_participants[]
+  grade_snapshot_rows      grade_snapshot_rows[]
+  invoices                 invoices[]
+  leave_requests           leave_requests[]
+  meal_student_charges     meal_student_charges[]
+  student_accounts         student_accounts?
+  student_cohort           student_cohort?
+  student_group_history    student_group_history[]
+  student_living_history   student_living_history[]
+  student_outcomes         student_outcomes?
+  student_risk_scores      student_risk_scores[]
+  student_room_assignments student_room_assignments[]
+  student_timeline         student_timeline[]
+  campuses                 campuses?                  @relation(fields: [campus_id], references: [id], onUpdate: NoAction)
+  users                    users?                     @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  groups                   groups?                    @relation(fields: [current_group_id], references: [id], onUpdate: NoAction)
+  living_types             living_types?              @relation(fields: [living_type_id], references: [id], onUpdate: NoAction)
+  tenants                  tenants                    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  student_tracks           student_tracks?            @relation(fields: [track_id], references: [id], onUpdate: NoAction)
+  violations               violations[]
+}
+
+model subjects {
+  id                BigInt              @id @default(autoincrement())
+  tenant_id         BigInt
+  name              String
+  is_core           Boolean             @default(true)
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  assessments       assessments[]
+  certificates      certificates[]
+  group_subjects    group_subjects[]
+  tenants           tenants             @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  timetable_lessons timetable_lessons[]
+
+  @@unique([tenant_id, name])
+}
+
+model system_settings {
+  id         BigInt   @id @default(autoincrement())
+  tenant_id  BigInt
+  key        String
+  value      String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  tenants    tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenant_id, key])
+}
+
+model tenants {
+  id                         BigInt                       @id @default(autoincrement())
+  name                       String
+  slug                       String                       @unique
+  timezone                   String                       @default("Asia/Tashkent")
+  created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  academic_years             academic_years[]
+  announcements              announcements[]
+  assessments                assessments[]
+  attendance_sessions        attendance_sessions[]
+  audit_logs                 audit_logs[]
+  auth_attempts              auth_attempts[]
+  auth_locks                 auth_locks[]
+  auth_sessions              auth_sessions[]
+  awards                     awards[]
+  campuses                   campuses[]
+  certificates               certificates[]
+  cohorts                    cohorts[]
+  competitions               competitions[]
+  discipline_actions         discipline_actions[]
+  display_playlists          display_playlists[]
+  displays                   displays[]
+  dorm_billing_months        dorm_billing_months[]
+  dorm_payment_announcements dorm_payment_announcements[]
+  dorm_student_charges       dorm_student_charges[]
+  dorms                      dorms[]
+  events                     events[]
+  files                      files[]
+  grade_snapshots            grade_snapshots[]
+  groups                     groups[]
+  invoices                   invoices[]
+  leave_requests             leave_requests[]
+  living_types               living_types[]
+  meal_payment_announcements meal_payment_announcements[]
+  meal_student_charges       meal_student_charges[]
+  meal_weeks                 meal_weeks[]
+  notification_preferences   notification_preferences[]
+  notification_templates     notification_templates[]
+  notifications              notifications[]
+  payments                   payments[]
+  roles                      roles[]
+  student_accounts           student_accounts[]
+  student_group_history      student_group_history[]
+  student_id_sequences       student_id_sequences?
+  student_living_history     student_living_history[]
+  student_outcomes           student_outcomes[]
+  student_risk_scores        student_risk_scores[]
+  student_room_assignments   student_room_assignments[]
+  student_timeline           student_timeline[]
+  student_tracks             student_tracks[]
+  students                   students[]
+  subjects                   subjects[]
+  system_settings            system_settings[]
+  timetable                  timetable[]
+  users                      users[]
+  violations                 violations[]
+}
+
+model timetable {
+  id                 BigInt              @id @default(autoincrement())
+  tenant_id          BigInt
+  group_id           BigInt
+  academic_year_id   BigInt
+  name               String
+  created_by_user_id BigInt?
+  created_at         DateTime            @default(now()) @db.Timestamptz(6)
+  academic_years     academic_years      @relation(fields: [academic_year_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users              users?              @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  groups             groups              @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants            tenants             @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  timetable_lessons  timetable_lessons[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model timetable_lessons {
+  id              BigInt    @id @default(autoincrement())
+  timetable_id    BigInt
+  day_of_week     Int       @db.SmallInt
+  period_no       Int       @db.SmallInt
+  subject_id      BigInt
+  teacher_user_id BigInt?
+  room            String?
+  starts_at       DateTime? @db.Time(6)
+  ends_at         DateTime? @db.Time(6)
+  subjects        subjects  @relation(fields: [subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users           users?    @relation(fields: [teacher_user_id], references: [id], onUpdate: NoAction)
+  timetable       timetable @relation(fields: [timetable_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([timetable_id, day_of_week, period_no])
+}
+
+model user_roles {
+  user_id BigInt
+  role_id BigInt
+  roles   roles  @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users   users  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([user_id, role_id])
+}
+
+model users {
+  id                                           BigInt                       @id @default(autoincrement())
+  tenant_id                                    BigInt
+  username                                     String
+  password_hash                                String
+  full_name                                    String
+  phone                                        String?
+  email                                        String?
+  is_active                                    Boolean                      @default(true)
+  created_by_user_id                           BigInt?
+  created_at                                   DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at                                   DateTime                     @default(now()) @db.Timestamptz(6)
+  last_login_at                                DateTime?                    @db.Timestamptz(6)
+  announcements                                announcements[]
+  assessment_scores                            assessment_scores[]
+  assessments                                  assessments[]
+  attendance_sessions                          attendance_sessions[]
+  audit_logs                                   audit_logs[]
+  auth_sessions                                auth_sessions[]
+  awards                                       awards[]
+  discipline_actions                           discipline_actions[]
+  dorm_payment_announcements                   dorm_payment_announcements[]
+  events                                       events[]
+  files                                        files[]
+  groups                                       groups[]
+  invoices                                     invoices[]
+  leave_requests                               leave_requests[]
+  meal_payment_announcements                   meal_payment_announcements[]
+  notification_preferences                     notification_preferences[]
+  notifications                                notifications[]
+  payments_payments_created_by_user_idTousers  payments[]                   @relation("payments_created_by_user_idTousers")
+  payments_payments_received_by_user_idTousers payments[]                   @relation("payments_received_by_user_idTousers")
+  student_accounts                             student_accounts[]
+  student_cohort                               student_cohort[]
+  student_group_history                        student_group_history[]
+  student_living_history                       student_living_history[]
+  student_outcomes                             student_outcomes[]
+  student_room_assignments                     student_room_assignments[]
+  student_timeline                             student_timeline[]
+  students                                     students[]
+  timetable                                    timetable[]
+  timetable_lessons                            timetable_lessons[]
+  user_roles                                   user_roles[]
+  users                                        users?                       @relation("usersTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  other_users                                  users[]                      @relation("usersTousers")
+  tenants                                      tenants                      @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  violations                                   violations[]
+
+  @@unique([tenant_id, username])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model violations {
+  id                          BigInt              @id @default(autoincrement())
+  tenant_id                   BigInt
+  student_id                  BigInt
+  rule_code                   String
+  description                 String
+  severity                    String              @default("LOW") @db.VarChar(10)
+  evidence_file_id            BigInt?
+  detected_at                 DateTime            @default(now()) @db.Timestamptz(6)
+  recorded_by_user_id         BigInt?
+  linked_discipline_action_id BigInt?
+  files                       files?              @relation(fields: [evidence_file_id], references: [id], onUpdate: NoAction)
+  discipline_actions          discipline_actions? @relation(fields: [linked_discipline_action_id], references: [id], onUpdate: NoAction)
+  users                       users?              @relation(fields: [recorded_by_user_id], references: [id], onUpdate: NoAction)
+  students                    students            @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants                     tenants             @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}

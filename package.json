@@ -1,0 +1,14 @@
+{
+  "name": "mathacademy-digital-campus",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm -w apps/web run dev",
+    "dev:api": "npm -w apps/api run start:dev",
+    "lint": "npm -ws run lint",
+    "format": "prettier . --write"
+  }
+}
