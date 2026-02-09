@@ -1,13 +1,13 @@
 import {
   CanActivate,
   ExecutionContext,
-  Injectable,
-  UnauthorizedException,
   ForbiddenException,
-} from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { ROLES_KEY } from '../decorators/roles.decorator';
-import { JwtService } from '@nestjs/jwt';
+  Injectable,
+} from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { JwtService } from "@nestjs/jwt";
+import { ROLES_KEY } from "../decorators/roles.decorator";
+import { ensureUser } from "../auth/jwt-request.util";
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -25,19 +25,11 @@ export class RolesGuard implements CanActivate {
     if (!required || required.length === 0) return true;
 
     const req = context.switchToHttp().getRequest();
-    const auth = String(req.headers?.authorization || '');
-    const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+    const user = await ensureUser(req, this.jwt);
 
-    if (!token) throw new UnauthorizedException('NO_ACCESS_TOKEN');
-
-    const payload = await this.jwt.verifyAsync(token, {
-      secret: process.env.JWT_ACCESS_SECRET!,
-    });
-    req.user = payload;
-
-    const roles: string[] = Array.isArray(payload?.roles) ? payload.roles : [];
+    const roles = Array.isArray(user?.roles) ? user.roles : [];
     const ok = required.some((r) => roles.includes(r));
-    if (!ok) throw new ForbiddenException('FORBIDDEN_ROLE');
+    if (!ok) throw new ForbiddenException("FORBIDDEN_ROLE");
 
     return true;
   }

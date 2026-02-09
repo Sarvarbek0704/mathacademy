@@ -1,13 +1,14 @@
 import {
-  Controller,
-  Get,
-  Query,
-  UseGuards,
-  Req,
-  Patch,
   Body,
-  Post,
+  Controller,
+  Delete,
+  Get,
   Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../../common/decorators/perms.decorator';
@@ -16,6 +17,7 @@ import { StudentsService } from './students.service';
 import { StudentListQuery } from './dto/student-list.query';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { AssignGroupDto } from './dto/assign-group.dto';
+import { UpdateStudentDto } from './dto/update-student.dto';
 
 @ApiTags('Staff - Students')
 @ApiBearerAuth('access-token')
@@ -37,6 +39,15 @@ export class StudentsController {
     });
   }
 
+  @RequirePermissions('students.read')
+  @Get(':id')
+  detail(@Req() req: any, @Param('id') id: string) {
+    return this.students.detail({
+      tenantId: String(req.user?.tenantId || ''),
+      studentId: id,
+    });
+  }
+
   @RequirePermissions('students.write')
   @Post()
   create(@Req() req: any, @Body() dto: CreateStudentDto) {
@@ -46,6 +57,21 @@ export class StudentsController {
       dto,
     });
   }
+
+  @RequirePermissions('students.write')
+  @Patch(':id')
+  update(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateStudentDto,
+  ) {
+    return this.students.update({
+      tenantId: String(req.user?.tenantId || ''),
+      studentId: id,
+      dto: { ...dto, changedByUserId: String(req.user?.userId || '') },
+    });
+  }
+
   @RequirePermissions('students.write')
   @Patch(':id/group')
   assignGroup(
@@ -57,13 +83,24 @@ export class StudentsController {
       tenantId: String(req.user?.tenantId || ''),
       studentId: id,
       groupId: dto.groupId,
+      changedByUserId: String(req.user?.userId || ''),
     });
   }
 
-  @RequirePermissions('students.read')
-  @Get(':id')
-  detail(@Req() req: any, @Param('id') id: string) {
-    return this.students.detail({
+  @RequirePermissions('students.write')
+  @Delete(':id')
+  remove(@Req() req: any, @Param('id') id: string) {
+    return this.students.remove({
+      tenantId: String(req.user?.tenantId || ''),
+      studentId: id,
+    });
+  }
+
+  // ✅ foydali: guardian parolini reset qilish
+  @RequirePermissions('students.write')
+  @Post(':id/reset-guardian-password')
+  resetGuardianPassword(@Req() req: any, @Param('id') id: string) {
+    return this.students.resetGuardianPassword({
       tenantId: String(req.user?.tenantId || ''),
       studentId: id,
     });

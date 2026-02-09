@@ -1,11 +1,34 @@
 import {
-  Injectable,
   BadRequestException,
+  Injectable,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
+import { parseDateOnlyOrNow } from '../../common/utils/date.util';
+
+function toBigInt(v: unknown, field: string): bigint {
+  const s = String(v ?? '').trim();
+  if (!s || !/^\d+$/.test(s))
+    throw new BadRequestException(`INVALID_${field.toUpperCase()}`);
+  return BigInt(s);
+}
+
+function prismaErrorToHttp(e: unknown): never {
+  if (e instanceof Prisma.PrismaClientKnownRequestError) {
+    if (e.code === 'P2002') throw new ConflictException('UNIQUE_CONSTRAINT');
+    if (e.code === 'P2003') throw new ConflictException('FK_CONSTRAINT');
+    if (e.code === 'P2025') throw new NotFoundException('NOT_FOUND');
+  }
+  throw e;
+}
+
+function genTempPassword(): string {
+  return randomBytes(6).toString('base64url'); // ~8-10 char
+}
 
 @Injectable()
 export class StudentsService {
@@ -19,237 +42,301 @@ export class StudentsService {
     limit: number;
     offset: number;
   }) {
-    const tenantId = BigInt(args.tenantId || '0');
-    const q = String(args.q || '').trim();
-    const limit = Math.max(1, Math.min(200, args.limit || 50));
-    const offset = Math.max(0, args.offset || 0);
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const q = String(args.q || '').trim();
+      const limit = Math.max(1, Math.min(200, Number(args.limit || 50)));
+      const offset = Math.max(0, Number(args.offset || 0));
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-    SELECT
-      s.id,
-      s.full_name,
-      s.status,
-      s.created_at,
-      s.current_group_id,
-      g.name AS group_name,
-      sa.student_login_id
-    FROM students s
-    LEFT JOIN groups g ON g.id = s.current_group_id
-    LEFT JOIN student_accounts sa ON sa.student_id = s.id
-    WHERE s.tenant_id = ${tenantId}
-      ${
-        args.groupId
-          ? Prisma.sql`AND s.current_group_id = ${BigInt(args.groupId)}`
-          : Prisma.empty
-      }
-      ${args.status ? Prisma.sql`AND s.status = ${args.status}` : Prisma.empty}
-      ${
-        q
-          ? Prisma.sql`AND (s.full_name ILIKE ${'%' + q + '%'} OR sa.student_login_id ILIKE ${'%' + q + '%'})`
-          : Prisma.empty
-      }
-    ORDER BY s.id DESC
-    LIMIT ${limit} OFFSET ${offset}
-  `,
-    );
+      const where: Prisma.studentsWhereInput = {
+        tenant_id,
+        ...(args.groupId
+          ? { current_group_id: toBigInt(args.groupId, 'groupId') }
+          : {}),
+        ...(args.status ? { status: String(args.status) } : {}),
+        ...(q
+          ? {
+              OR: [
+                { full_name: { contains: q, mode: 'insensitive' } },
+                {
+                  student_accounts: {
+                    is: {
+                      student_login_id: { contains: q, mode: 'insensitive' },
+                    },
+                  },
+                },
+              ],
+            }
+          : {}),
+      };
 
-    return { data: rows, meta: { limit, offset } };
+      const [rows, total] = await this.prisma.$transaction([
+        this.prisma.students.findMany({
+          where,
+          orderBy: { id: 'desc' },
+          skip: offset,
+          take: limit,
+          include: {
+            groups: { select: { id: true, name: true } },
+            // ✅ 1:1 relation → take/orderBy kerak emas
+            student_accounts: { select: { student_login_id: true } },
+          },
+        }),
+        this.prisma.students.count({ where }),
+      ]);
+
+      return {
+        data: rows.map((r) => ({
+          id: r.id,
+          full_name: r.full_name,
+          status: r.status,
+          created_at: r.created_at,
+          current_group_id: r.current_group_id,
+          group_name: r.groups?.name ?? null,
+          student_login_id: r.student_accounts?.student_login_id ?? null,
+        })),
+        meta: { limit, offset, total },
+      };
+    } catch (e) {
+      prismaErrorToHttp(e);
+    }
   }
 
   async create(args: { tenantId: string; createdByUserId: string; dto: any }) {
-    const tenantId = BigInt(args.tenantId);
-    const createdByUserId = args.createdByUserId
-      ? BigInt(args.createdByUserId)
-      : null;
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const created_by_user_id = args.createdByUserId
+        ? toBigInt(args.createdByUserId, 'createdByUserId')
+        : null;
 
-    const fullName = String(args.dto.fullName || '').trim();
-    const status = String(args.dto.status || 'ACTIVE').trim();
-    const currentGroupId = args.dto.currentGroupId
-      ? BigInt(args.dto.currentGroupId)
-      : null;
+      const full_name = String(args.dto.fullName || '').trim();
+      if (!full_name) throw new BadRequestException('FULL_NAME_REQUIRED');
 
-    const admissionGrade = Number(args.dto.admissionGrade || 10); // default 10
-    const admissionDateSql = args.dto.admissionDate
-      ? Prisma.sql`${args.dto.admissionDate}::date`
-      : Prisma.sql`now()::date`;
+      const status = String(args.dto.status || 'ACTIVE').trim();
 
-    const expectedGraduationYear =
-      args.dto.expectedGraduationYear ??
-      (
-        await this.prisma.$queryRaw<{ y: number }[]>(
-          Prisma.sql`
-        SELECT (EXTRACT(YEAR FROM now())::int + (11 - ${admissionGrade})) AS y
-      `,
-        )
-      )[0].y;
+      const admission_grade = Number(args.dto.admissionGrade ?? 10);
+      if (![10, 11].includes(admission_grade))
+        throw new BadRequestException('INVALID_ADMISSION_GRADE');
 
-    // tenant slug (guardian login uchun)
-    const t = await this.prisma.$queryRaw<{ slug: string }[]>(
-      Prisma.sql`SELECT slug FROM tenants WHERE id = ${tenantId} LIMIT 1`,
-    );
-    const tenantSlug = t[0]?.slug || 'tenant';
+      const admission_date = parseDateOnlyOrNow(
+        args.dto.admissionDate,
+        'admissionDate',
+      );
+      const expected_graduation_year =
+        args.dto.expectedGraduationYear ??
+        new Date().getFullYear() + (11 - admission_grade);
 
-    // 1) student yaratish (NOT NULL fieldlar bilan)
-    const created = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`
-      INSERT INTO students (
-        tenant_id,
-        full_name,
-        status,
-        current_group_id,
-        admission_grade,
-        admission_date,
-        expected_graduation_year,
-        created_by_user_id
-      )
-      VALUES (
-        ${tenantId},
-        ${fullName},
-        ${status},
-        ${currentGroupId},
-        ${admissionGrade},
-        ${admissionDateSql},
-        ${expectedGraduationYear},
-        ${createdByUserId}
-      )
-      RETURNING id
-    `,
-    );
-    const studentId = created[0].id;
+      const current_group_id = args.dto.currentGroupId
+        ? toBigInt(args.dto.currentGroupId, 'currentGroupId')
+        : null;
 
-    // 2) next student_login_id (000001...)
-    const last = await this.prisma.$queryRaw<{ student_login_id: string }[]>(
-      Prisma.sql`
-      SELECT student_login_id
-      FROM student_accounts
-      WHERE tenant_id = ${tenantId}
-      ORDER BY student_login_id DESC
-      LIMIT 1
-    `,
-    );
+      const tenant = await this.prisma.tenants.findUnique({
+        where: { id: tenant_id },
+        select: { slug: true },
+      });
+      const tenantSlug = tenant?.slug || 'tenant';
 
-    const lastNum = last.length ? Number(last[0].student_login_id) : 0;
-    const nextNum = lastNum + 1;
-    const loginId = String(nextNum).padStart(6, '0');
+      const tempPassword = genTempPassword();
+      const password_hash = await bcrypt.hash(tempPassword, 10);
 
-    // 3) account yaratish
-    const hash = await bcrypt.hash('root', 10);
+      const result = await this.prisma.$transaction(async (tx) => {
+        if (current_group_id) {
+          const g = await tx.groups.findFirst({
+            where: { id: current_group_id, tenant_id },
+            select: { id: true },
+          });
+          if (!g) throw new BadRequestException('GROUP_NOT_FOUND');
+        }
 
-    await this.prisma.$executeRaw(
-      Prisma.sql`
-      INSERT INTO student_accounts (
-        tenant_id, student_id, student_login_id,
-        password_hash, is_active, must_change_password, created_at
-      )
-      VALUES (${tenantId}, ${studentId}, ${loginId}, ${hash}, true, true, now())
-    `,
-    );
+        const student = await tx.students.create({
+          data: {
+            tenants: { connect: { id: tenant_id } },
+            full_name,
+            status,
+            admission_grade,
+            admission_date,
+            expected_graduation_year,
+            ...(current_group_id
+              ? { groups: { connect: { id: current_group_id } } }
+              : {}),
+            ...(created_by_user_id
+              ? { users: { connect: { id: created_by_user_id } } }
+              : {}),
+          },
+          select: { id: true },
+        });
 
-    return {
-      id: studentId.toString(),
-      studentLoginId: loginId,
-      guardianLogin: `${tenantSlug}-${loginId}`,
-      mustChangePassword: true,
-    };
+        const seq = await tx.student_id_sequences.upsert({
+          where: { tenant_id },
+          create: { tenant_id, last_seq: 1 },
+          update: { last_seq: { increment: 1 } },
+          select: { last_seq: true },
+        });
+
+        const loginId = String(seq.last_seq).padStart(6, '0');
+
+        await tx.student_accounts.create({
+          data: {
+            tenants: { connect: { id: tenant_id } },
+            students: { connect: { id: student.id } },
+            student_login_id: loginId,
+            password_hash,
+            is_active: true,
+            must_change_password: true,
+            ...(created_by_user_id
+              ? { users: { connect: { id: created_by_user_id } } }
+              : {}),
+          },
+          select: { id: true },
+        });
+
+        if (current_group_id) {
+          // ✅ mana shu joyda changed_by_user_id endi bor
+          const changed_by_user_id = created_by_user_id;
+          await tx.student_group_history.create({
+            data: {
+              tenants: { connect: { id: tenant_id } },
+              students: { connect: { id: student.id } },
+              groups: { connect: { id: current_group_id } },
+              ...(changed_by_user_id
+                ? { users: { connect: { id: changed_by_user_id } } }
+                : {}),
+            },
+          });
+        }
+
+        return { studentId: student.id, loginId };
+      });
+
+      return {
+        id: result.studentId.toString(),
+        studentLoginId: result.loginId,
+        guardianLogin: `${tenantSlug}-${result.loginId}`,
+        mustChangePassword: true,
+        tempPassword, // dev/admin uchun qulay
+      };
+    } catch (e) {
+      prismaErrorToHttp(e);
+    }
   }
 
   async assignGroup(args: {
     tenantId: string;
+    changedByUserId: string;
     studentId: string;
     groupId: string;
   }) {
-    const tenantId = BigInt(args.tenantId);
-    const studentId = BigInt(args.studentId);
-    const groupId = BigInt(args.groupId);
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const student_id = toBigInt(args.studentId, 'studentId');
+      const group_id = toBigInt(args.groupId, 'groupId');
+      const changed_by_user_id = args.changedByUserId
+        ? toBigInt(args.changedByUserId, 'changedByUserId')
+        : null;
 
-    // group mavjudmi (tenant ichida)
-    const g = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`
-      SELECT id FROM groups
-      WHERE tenant_id = ${tenantId} AND id = ${groupId}
-      LIMIT 1
-    `,
-    );
-    if (!g.length) throw new BadRequestException('GROUP_NOT_FOUND');
+      const [s, g] = await this.prisma.$transaction([
+        this.prisma.students.findFirst({
+          where: { id: student_id, tenant_id },
+          select: { id: true },
+        }),
+        this.prisma.groups.findFirst({
+          where: { id: group_id, tenant_id },
+          select: { id: true },
+        }),
+      ]);
+      if (!s) throw new NotFoundException('STUDENT_NOT_FOUND');
+      if (!g) throw new BadRequestException('GROUP_NOT_FOUND');
 
-    // student mavjudmi (tenant ichida)
-    const s = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`
-      SELECT id FROM students
-      WHERE tenant_id = ${tenantId} AND id = ${studentId}
-      LIMIT 1
-    `,
-    );
-    if (!s.length) throw new BadRequestException('STUDENT_NOT_FOUND');
+      await this.prisma.$transaction(async (tx) => {
+        await tx.students.update({
+          where: { id: student_id },
+          data: { groups: { connect: { id: group_id } } },
+        });
 
-    await this.prisma.$executeRaw(
-      Prisma.sql`
-      UPDATE students
-      SET current_group_id = ${groupId}
-      WHERE id = ${studentId}
-    `,
-    );
+        await tx.student_group_history.create({
+          data: {
+            tenants: { connect: { id: tenant_id } },
+            students: { connect: { id: student_id } },
+            groups: { connect: { id: group_id } },
+            ...(changed_by_user_id
+              ? { users: { connect: { id: changed_by_user_id } } }
+              : {}),
+          },
+        });
+      });
 
-    return { ok: true };
+      return { ok: true };
+    } catch (e) {
+      prismaErrorToHttp(e);
+    }
   }
 
   async detail(args: { tenantId: string; studentId: string }) {
-    const tenantId = BigInt(args.tenantId);
-    const studentId = BigInt(args.studentId);
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const id = toBigInt(args.studentId, 'studentId');
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-      SELECT
-        s.id,
-        s.full_name,
-        s.status,
-        s.admission_grade,
-        s.admission_date,
-        s.expected_graduation_year,
-        s.created_at,
-        s.current_group_id,
-        g.name AS group_name,
-        sa.student_login_id,
-        sa.is_active AS account_is_active,
-        sa.must_change_password
-      FROM students s
-      LEFT JOIN groups g ON g.id = s.current_group_id
-      LEFT JOIN student_accounts sa ON sa.student_id = s.id
-      WHERE s.tenant_id = ${tenantId} AND s.id = ${studentId}
-      LIMIT 1
-    `,
-    );
+      const row = await this.prisma.students.findFirst({
+        where: { id, tenant_id },
+        include: {
+          groups: { select: { id: true, name: true } },
+          student_accounts: {
+            select: {
+              student_login_id: true,
+              is_active: true,
+              must_change_password: true,
+            },
+          },
+        },
+      });
 
-    if (!rows.length) throw new NotFoundException('STUDENT_NOT_FOUND');
-    return rows[0];
+      if (!row) throw new NotFoundException('STUDENT_NOT_FOUND');
+
+      return {
+        ...row,
+        group_name: row.groups?.name ?? null,
+        student_login_id: row.student_accounts?.student_login_id ?? null,
+      };
+    } catch (e) {
+      prismaErrorToHttp(e);
+    }
   }
 
   async guardianMe(args: { studentAccountId: string }) {
-    const studentAccountId = BigInt(args.studentAccountId);
+    try {
+      const studentAccountId = toBigInt(
+        args.studentAccountId,
+        'studentAccountId',
+      );
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-      SELECT
-        s.id,
-        s.full_name,
-        s.status,
-        s.admission_grade,
-        s.admission_date,
-        s.expected_graduation_year,
-        s.created_at,
-        s.current_group_id,
-        g.name AS group_name,
-        sa.student_login_id,
-        sa.must_change_password
-      FROM student_accounts sa
-      JOIN students s ON s.id = sa.student_id
-      LEFT JOIN groups g ON g.id = s.current_group_id
-      WHERE sa.id = ${studentAccountId}
-      LIMIT 1
-    `,
-    );
+      const acc = await this.prisma.student_accounts.findFirst({
+        where: { id: studentAccountId },
+        include: {
+          students: {
+            include: {
+              groups: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
 
-    return rows.length ? rows[0] : null;
+      if (!acc?.students) return null;
+
+      return {
+        id: acc.students.id,
+        full_name: acc.students.full_name,
+        status: acc.students.status,
+        admission_grade: acc.students.admission_grade,
+        admission_date: acc.students.admission_date,
+        expected_graduation_year: acc.students.expected_graduation_year,
+        created_at: acc.students.created_at,
+        current_group_id: acc.students.current_group_id,
+        group_name: acc.students.groups?.name ?? null,
+        student_login_id: acc.student_login_id,
+        must_change_password: acc.must_change_password,
+      };
+    } catch (e) {
+      prismaErrorToHttp(e);
+    }
   }
 }

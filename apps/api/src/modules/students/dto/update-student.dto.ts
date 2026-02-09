@@ -1,11 +1,12 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
-export class CreateStudentDto {
-  @ApiProperty({ example: 'Test Student' })
+export class UpdateStudentDto {
+  @ApiPropertyOptional({ example: 'Updated Name' })
+  @IsOptional()
   @IsString()
-  fullName!: string;
+  fullName?: string;
 
   @ApiPropertyOptional({
     example: 'ACTIVE',
@@ -15,12 +16,12 @@ export class CreateStudentDto {
   @IsIn(['ACTIVE', 'GRADUATED', 'EXPELLED', 'WITHDRAWN'])
   status?: string;
 
-  @ApiPropertyOptional({ example: '1', description: 'groups.id (optional)' })
+  @ApiPropertyOptional({ example: '1', description: 'groups.id' })
   @IsOptional()
   @IsString()
   currentGroupId?: string;
 
-  @ApiPropertyOptional({ example: 10, description: 'Asosan 10 yoki 11' })
+  @ApiPropertyOptional({ example: 10 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -28,18 +29,12 @@ export class CreateStudentDto {
   @Max(11)
   admissionGrade?: number;
 
-  @ApiPropertyOptional({
-    example: '2026-02-07',
-    description: 'YYYY-MM-DD (bo‘sh bo‘lsa bugun)',
-  })
+  @ApiPropertyOptional({ example: '2026-02-07', description: 'YYYY-MM-DD' })
   @IsOptional()
   @IsString()
   admissionDate?: string;
 
-  @ApiPropertyOptional({
-    example: 2027,
-    description: 'Bo‘sh bo‘lsa admissionGrade bo‘yicha avtomatik',
-  })
+  @ApiPropertyOptional({ example: 2027 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
