@@ -1,5 +1,5 @@
 // src/main.ts - to'g'rilangan
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
@@ -54,10 +54,14 @@ async function bootstrap() {
 
   app.useGlobalPipes(
     new ValidationPipe({
+      exceptionFactory: (errors) => {
+        console.error('Validation errors:', JSON.stringify(errors, null, 2));
+        return new BadRequestException(errors);
+      },
       whitelist: true,
       transform: true,
-      forbidNonWhitelisted: true,
-      forbidUnknownValues: true,
+      forbidNonWhitelisted: false, // qo‘shimcha maydonlarga ruxsat
+      forbidUnknownValues: false,
       validationError: { target: false, value: false },
       transformOptions: { enableImplicitConversion: true },
     }),
@@ -80,6 +84,8 @@ async function bootstrap() {
   });
 
   await app.listen(port);
+  console.log(`Server started on http://localhost:${port}/api`);
+  console.log(`Swagger started on http://localhost:${port}/api/docs`);
 }
 
 bootstrap();

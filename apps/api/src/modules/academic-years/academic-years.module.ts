@@ -4,6 +4,6 @@ import { AcademicYearsService } from './academic-years.service';
 
 @Module({
   controllers: [AcademicYearsController],
-  providers: [AcademicYearsService]
+  providers: [AcademicYearsService],
 })
 export class AcademicYearsModule {}

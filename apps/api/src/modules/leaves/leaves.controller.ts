@@ -1,21 +1,37 @@
+// apps/api/src/modules/leaves/leaves.controller.ts
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   Req,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiQuery,
+} from '@nestjs/swagger';
+
 import { PermissionsGuard } from '../../common/guards/perms.guard';
 import { RequirePermissions } from '../../common/decorators/perms.decorator';
 import { AccessGuard } from '../../common/guards/access.guard';
+import { ParseBigIntPipe } from '../../common/pipes/parse-bigint.pipe';
+
 import { LeavesService } from './leaves.service';
 import { CreateLeaveDto } from './dto/create-leave.dto';
+import { UpdateLeaveDto } from './dto/update-leave.dto';
 import { LeaveDecisionDto } from './dto/decision.dto';
+import { LeaveListQueryDto } from './dto/leave-list.query.dto';
+import { GuardianLeaveQueryDto } from './dto/guardian-leave.query.dto';
 
 @ApiTags('Staff - Leaves')
 @ApiBearerAuth('access-token')
@@ -24,82 +40,137 @@ import { LeaveDecisionDto } from './dto/decision.dto';
 export class LeavesController {
   constructor(private readonly svc: LeavesService) {}
 
-  @RequirePermissions('leaves.write')
+  private tenantId(req: any): string {
+    return String(req.user?.tenantId || '');
+  }
+
+  private userId(req: any): string {
+    return String(req.user?.userId || '');
+  }
+
+  private ip(req: any): string | undefined {
+    const xf = String(req.headers?.['x-forwarded-for'] || '')
+      .split(',')[0]
+      ?.trim();
+    return xf || req.ip || req.connection?.remoteAddress || undefined;
+  }
+
   @Post()
+  @RequirePermissions('leaves.write')
+  @ApiOperation({ summary: 'Create a new leave request' })
+  @ApiResponse({ status: 201, description: 'Leave request created' })
   create(@Req() req: any, @Body() dto: CreateLeaveDto) {
     return this.svc.create({
-      tenantId: String(req.user?.tenantId || ''),
+      tenantId: this.tenantId(req),
+      userId: this.userId(req),
       dto,
+      ipAddress: this.ip(req),
     });
   }
 
-  @RequirePermissions('leaves.read')
-  @ApiQuery({ name: 'studentId', required: false })
-  @ApiQuery({ name: 'groupId', required: false })
-  @ApiQuery({ name: 'status', required: false })
-  @ApiQuery({ name: 'from', required: false })
-  @ApiQuery({ name: 'to', required: false })
   @Get()
-  list(
-    @Req() req: any,
-    @Query('studentId') studentId?: string,
-    @Query('groupId') groupId?: string,
-    @Query('status') status?: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
+  @RequirePermissions('leaves.read')
+  @ApiOperation({ summary: 'List leave requests with pagination and filters' })
+  list(@Req() req: any, @Query() query: LeaveListQueryDto) {
     return this.svc.list({
-      tenantId: String(req.user?.tenantId || ''),
-      studentId,
-      groupId,
-      status,
-      from,
-      to,
+      tenantId: this.tenantId(req),
+      query,
     });
   }
 
+  @Get(':id')
+  @RequirePermissions('leaves.read')
+  @ApiOperation({ summary: 'Get leave request details' })
+  @ApiParam({ name: 'id', description: 'Leave request ID' })
+  getDetail(@Req() req: any, @Param('id', ParseBigIntPipe) id: bigint) {
+    return this.svc.getDetail({
+      tenantId: this.tenantId(req),
+      leaveId: id.toString(),
+    });
+  }
+
+  @Patch(':id')
   @RequirePermissions('leaves.write')
+  @ApiOperation({ summary: 'Update pending leave request' })
+  @ApiParam({ name: 'id', description: 'Leave request ID' })
+  update(
+    @Req() req: any,
+    @Param('id', ParseBigIntPipe) id: bigint,
+    @Body() dto: UpdateLeaveDto,
+  ) {
+    return this.svc.update({
+      tenantId: this.tenantId(req),
+      leaveId: id.toString(),
+      userId: this.userId(req),
+      dto,
+      ipAddress: this.ip(req),
+    });
+  }
+
+  @Delete(':id')
+  @RequirePermissions('leaves.write')
+  @ApiOperation({ summary: 'Delete pending leave request' })
+  @ApiParam({ name: 'id', description: 'Leave request ID' })
+  delete(@Req() req: any, @Param('id', ParseBigIntPipe) id: bigint) {
+    return this.svc.delete({
+      tenantId: this.tenantId(req),
+      leaveId: id.toString(),
+      userId: this.userId(req),
+      ipAddress: this.ip(req),
+    });
+  }
+
   @Post(':id/approve')
+  @RequirePermissions('leaves.write')
+  @ApiOperation({ summary: 'Approve leave request' })
+  @ApiParam({ name: 'id', description: 'Leave request ID' })
   approve(
     @Req() req: any,
-    @Param('id') id: string,
+    @Param('id', ParseBigIntPipe) id: bigint,
     @Body() dto: LeaveDecisionDto,
   ) {
     return this.svc.approve({
-      tenantId: String(req.user?.tenantId || ''),
-      userId: String(req.user?.userId || ''),
-      id,
-      notes: dto?.notes,
+      tenantId: this.tenantId(req),
+      userId: this.userId(req),
+      leaveId: id.toString(),
+      dto,
+      ipAddress: this.ip(req),
     });
   }
 
-  @RequirePermissions('leaves.write')
   @Post(':id/reject')
+  @RequirePermissions('leaves.write')
+  @ApiOperation({ summary: 'Reject leave request' })
+  @ApiParam({ name: 'id', description: 'Leave request ID' })
   reject(
     @Req() req: any,
-    @Param('id') id: string,
+    @Param('id', ParseBigIntPipe) id: bigint,
     @Body() dto: LeaveDecisionDto,
   ) {
     return this.svc.reject({
-      tenantId: String(req.user?.tenantId || ''),
-      userId: String(req.user?.userId || ''),
-      id,
-      notes: dto?.notes,
+      tenantId: this.tenantId(req),
+      userId: this.userId(req),
+      leaveId: id.toString(),
+      dto,
+      ipAddress: this.ip(req),
     });
   }
 
-  @RequirePermissions('leaves.write')
   @Post(':id/close')
+  @RequirePermissions('leaves.write')
+  @ApiOperation({ summary: 'Close approved leave request' })
+  @ApiParam({ name: 'id', description: 'Leave request ID' })
   close(
     @Req() req: any,
-    @Param('id') id: string,
+    @Param('id', ParseBigIntPipe) id: bigint,
     @Body() dto: LeaveDecisionDto,
   ) {
     return this.svc.close({
-      tenantId: String(req.user?.tenantId || ''),
-      userId: String(req.user?.userId || ''),
-      id,
-      notes: dto?.notes,
+      tenantId: this.tenantId(req),
+      userId: this.userId(req),
+      leaveId: id.toString(),
+      dto,
+      ipAddress: this.ip(req),
     });
   }
 }
@@ -111,24 +182,15 @@ export class LeavesController {
 export class GuardianLeavesController {
   constructor(private readonly svc: LeavesService) {}
 
-  @ApiQuery({ name: 'status', required: false })
-  @ApiQuery({ name: 'from', required: false })
-  @ApiQuery({ name: 'to', required: false })
   @Get()
-  my(
-    @Req() req: any,
-    @Query('status') status?: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
+  @ApiOperation({ summary: 'Get leave requests for my child' })
+  my(@Req() req: any, @Query() query: GuardianLeaveQueryDto) {
     const user = req.user;
     if (!user || user.type !== 'GUARDIAN')
       throw new UnauthorizedException('NOT_GUARDIAN');
     return this.svc.guardianList({
       studentAccountId: String(user.studentAccountId || ''),
-      status,
-      from,
-      to,
+      query,
     });
   }
 }

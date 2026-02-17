@@ -1,5 +1,5 @@
+// apps/api/src/modules/discipline/discipline.module.ts
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '../../prisma/prisma.module';
 import { DisciplineService } from './discipline.service';
 import {
   DisciplineController,
@@ -7,8 +7,8 @@ import {
 } from './discipline.controller';
 
 @Module({
-  imports: [PrismaModule],
   controllers: [DisciplineController, GuardianDisciplineController],
   providers: [DisciplineService],
+  exports: [DisciplineService],
 })
 export class DisciplineModule {}

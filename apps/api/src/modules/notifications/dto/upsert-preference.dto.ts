@@ -1,3 +1,4 @@
+// apps/api/src/modules/notifications/dto/upsert-preference.dto.ts
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsString } from 'class-validator';
 

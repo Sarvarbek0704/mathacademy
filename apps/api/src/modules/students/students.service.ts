@@ -415,7 +415,7 @@ export class StudentsService {
               tenant_id,
               student_id: student.id,
               group_id: current_group_id,
-              start_date: toDateOnly(new Date()),
+              start_date: new Date(), // yoki new Date(toDateOnly(new Date()))
               changed_by_user_id: created_by_user_id,
             },
           });
@@ -428,7 +428,7 @@ export class StudentsService {
               tenant_id,
               student_id: student.id,
               living_type_id,
-              start_date: toDateOnly(new Date()),
+              start_date: new Date(), // ✅ toDateOnly(new Date()) -> new Date()
               changed_by_user_id: created_by_user_id,
             },
           });
@@ -949,7 +949,7 @@ export class StudentsService {
               group_id: student.current_group_id,
               end_date: null,
             },
-            data: { end_date: toDateOnly(new Date()) },
+            data: { end_date: new Date() },
           });
         }
 
@@ -965,7 +965,7 @@ export class StudentsService {
             tenant_id,
             student_id,
             group_id,
-            start_date: toDateOnly(new Date()),
+            start_date: new Date(),
             changed_by_user_id,
           },
         });
@@ -1068,9 +1068,9 @@ export class StudentsService {
               end_date: null,
             },
             data: {
-              end_date: toDateOnly(
-                new Date(effective_date.getTime() - 24 * 60 * 60 * 1000),
-              ), // Day before new one starts
+              end_date: new Date(
+                effective_date.getTime() - 24 * 60 * 60 * 1000,
+              ),
               note: args.note || 'Changed to new living type',
             },
           });
@@ -1088,7 +1088,7 @@ export class StudentsService {
             tenant_id,
             student_id,
             living_type_id: livingType.id,
-            start_date: toDateOnly(effective_date),
+            start_date: effective_date,
             changed_by_user_id,
             note: args.note,
           },

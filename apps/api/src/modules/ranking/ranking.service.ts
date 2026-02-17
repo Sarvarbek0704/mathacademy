@@ -1,11 +1,35 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+// apps/api/src/modules/ranking/ranking.service.ts
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditLogger } from '../../common/utils/audit.util';
+import { rethrowServiceError } from '../../common/utils/service-error.util';
+
+import { CreateGradeSnapshotDto } from './dto/create-snapshot.dto';
+import { ListSnapshotsQueryDto } from './dto/list-snapshots.query.dto';
+
+function toBigInt(value: unknown, field = 'id'): bigint {
+  const s = String(value ?? '').trim();
+  if (!/^\d+$/.test(s) || s === '0')
+    throw new BadRequestException(`INVALID_${field.toUpperCase()}`);
+  return BigInt(s);
+}
 
 @Injectable()
 export class RankingService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly auditLogger: AuditLogger;
 
+  constructor(private readonly prisma: PrismaService) {
+    this.auditLogger = new AuditLogger(prisma);
+  }
+
+  /**
+   * Raw SQL for calculating total scores and rank within a group and date range.
+   */
   private totalsSql(
     tenantId: bigint,
     groupId: bigint,
@@ -61,224 +85,347 @@ export class RankingService {
     `;
   }
 
+  // ---------- Live ranking ----------
+
   async liveRanking(args: {
     tenantId: string;
     groupId: string;
     from: string;
     to: string;
   }) {
-    const tenantId = BigInt(args.tenantId);
-    const groupId = BigInt(args.groupId);
-    const from = String(args.from);
-    const to = String(args.to);
+    try {
+      const tenantId = toBigInt(args.tenantId, 'tenantId');
+      const groupId = toBigInt(args.groupId, 'groupId');
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        WITH ranked AS (${this.totalsSql(tenantId, groupId, from, to)})
-        SELECT
-          r.student_id,
-          st.full_name,
-          r.total_score,
-          r.rank,
-          r.risk_level
-        FROM ranked r
-        JOIN students st ON st.id = r.student_id
-        ORDER BY r.rank ASC
-        LIMIT 200
-      `,
-    );
+      // Basic validation: group exists and belongs to tenant
+      const group = await this.prisma.groups.findFirst({
+        where: { id: groupId, tenant_id: tenantId },
+      });
+      if (!group) throw new NotFoundException('GROUP_NOT_FOUND');
 
-    return { data: rows };
-  }
-
-  async createSnapshot(args: { tenantId: string; dto: any }) {
-    const tenantId = BigInt(args.tenantId);
-    const groupId = BigInt(args.dto.groupId);
-    const periodType = String(args.dto.periodType);
-    const start = String(args.dto.periodStart);
-    const end = String(args.dto.periodEnd);
-
-    const g = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`SELECT id FROM groups WHERE tenant_id=${tenantId} AND id=${groupId} LIMIT 1`,
-    );
-    if (!g.length) throw new BadRequestException('GROUP_NOT_FOUND');
-
-    // same period snapshot bo‘lsa — qayta generate (id o‘zgarmaydi)
-    const ex = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`
-        SELECT id
-        FROM grade_snapshots
-        WHERE tenant_id=${tenantId}
-          AND group_id=${groupId}
-          AND period_type=${periodType}
-          AND period_start=${start}::date
-          AND period_end=${end}::date
-        LIMIT 1
-      `,
-    );
-
-    let snapshotId: bigint;
-
-    if (ex.length) {
-      snapshotId = ex[0].id;
-
-      await this.prisma.$executeRaw(
-        Prisma.sql`UPDATE grade_snapshots SET generated_at=now() WHERE id=${snapshotId}`,
-      );
-      await this.prisma.$executeRaw(
-        Prisma.sql`DELETE FROM grade_snapshot_rows WHERE snapshot_id=${snapshotId}`,
-      );
-    } else {
-      const ins = await this.prisma.$queryRaw<{ id: bigint }[]>(
+      const rows = await this.prisma.$queryRaw<any[]>(
         Prisma.sql`
-          INSERT INTO grade_snapshots (tenant_id, group_id, period_type, period_start, period_end, generated_at)
-          VALUES (${tenantId}, ${groupId}, ${periodType}, ${start}::date, ${end}::date, now())
-          RETURNING id
+          WITH ranked AS (${this.totalsSql(tenantId, groupId, args.from, args.to)})
+          SELECT
+            r.student_id,
+            st.full_name,
+            r.total_score,
+            r.rank,
+            r.risk_level
+          FROM ranked r
+          JOIN students st ON st.id = r.student_id
+          ORDER BY r.rank ASC
         `,
       );
-      snapshotId = ins[0].id;
+
+      return {
+        data: rows.map((r) => ({
+          studentId: r.student_id.toString(),
+          studentName: r.full_name,
+          totalScore: r.total_score,
+          rank: r.rank,
+          riskLevel: r.risk_level,
+        })),
+      };
+    } catch (error) {
+      rethrowServiceError(error);
     }
-
-    // rows insert
-    await this.prisma.$executeRaw(
-      Prisma.sql`
-        INSERT INTO grade_snapshot_rows (snapshot_id, student_id, total_score, rank, risk_level)
-        SELECT
-          ${snapshotId} AS snapshot_id,
-          r.student_id,
-          r.total_score,
-          r.rank,
-          r.risk_level
-        FROM (${this.totalsSql(tenantId, groupId, start, end)}) r
-      `,
-    );
-
-    return { id: snapshotId.toString() };
   }
+
+  // ---------- Snapshot creation ----------
+
+  async createSnapshot(args: {
+    tenantId: string;
+    userId: string;
+    dto: CreateGradeSnapshotDto;
+    ipAddress?: string;
+  }) {
+    try {
+      const tenantId = toBigInt(args.tenantId, 'tenantId');
+      const groupId = toBigInt(args.dto.groupId, 'groupId');
+      const userId = args.userId ? toBigInt(args.userId, 'userId') : null;
+
+      // 1. Validate group
+      const group = await this.prisma.groups.findFirst({
+        where: { id: groupId, tenant_id: tenantId },
+        select: { id: true, name: true },
+      });
+      if (!group) throw new NotFoundException('GROUP_NOT_FOUND');
+
+      // 2. Validate date range
+      const start = new Date(args.dto.periodStart);
+      const end = new Date(args.dto.periodEnd);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        throw new BadRequestException('INVALID_DATE');
+      }
+      if (end < start) {
+        throw new BadRequestException('PERIOD_END_BEFORE_START');
+      }
+
+      // 3. Find existing snapshot for same period (to replace)
+      const existing = await this.prisma.grade_snapshots.findFirst({
+        where: {
+          tenant_id: tenantId,
+          group_id: groupId,
+          period_type: args.dto.periodType,
+          period_start: start,
+          period_end: end,
+        },
+        select: { id: true },
+      });
+
+      // Transaction returns the snapshot ID
+      const snapshotId = await this.prisma.$transaction(async (tx) => {
+        let sid: bigint;
+
+        if (existing) {
+          sid = existing.id;
+          await tx.grade_snapshots.update({
+            where: { id: sid },
+            data: { generated_at: new Date() },
+          });
+          await tx.grade_snapshot_rows.deleteMany({
+            where: { snapshot_id: sid },
+          });
+        } else {
+          const created = await tx.grade_snapshots.create({
+            data: {
+              tenant_id: tenantId,
+              group_id: groupId,
+              period_type: args.dto.periodType,
+              period_start: start,
+              period_end: end,
+              generated_at: new Date(),
+            },
+            select: { id: true },
+          });
+          sid = created.id;
+        }
+
+        // Insert fresh rows using the ranking CTE
+        await tx.$executeRaw(
+          Prisma.sql`
+            INSERT INTO grade_snapshot_rows (snapshot_id, student_id, total_score, rank, risk_level)
+            SELECT
+              ${sid} AS snapshot_id,
+              r.student_id,
+              r.total_score,
+              r.rank,
+              r.risk_level
+            FROM (${this.totalsSql(tenantId, groupId, args.dto.periodStart, args.dto.periodEnd)}) r
+          `,
+        );
+
+        return sid;
+      });
+
+      // 4. Audit log
+      await this.auditLogger.log({
+        tenantId: tenantId,
+        actorType: 'STAFF',
+        actorUserId: userId,
+        action: 'CREATE',
+        entityType: 'grade_snapshots',
+        entityId: snapshotId,
+        afterData: {
+          id: snapshotId.toString(),
+          groupId: groupId.toString(),
+          groupName: group.name,
+          periodType: args.dto.periodType,
+          periodStart: args.dto.periodStart,
+          periodEnd: args.dto.periodEnd,
+        },
+        ipAddress: args.ipAddress,
+      });
+
+      return { id: snapshotId.toString() };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
+
+  // ---------- List snapshots with pagination ----------
 
   async listSnapshots(args: {
     tenantId: string;
-    groupId?: string;
-    periodType?: string;
+    query: ListSnapshotsQueryDto;
   }) {
-    const tenantId = BigInt(args.tenantId);
-    const groupId = args.groupId ? BigInt(args.groupId) : null;
-    const periodType = args.periodType ? String(args.periodType) : null;
+    try {
+      const tenantId = toBigInt(args.tenantId, 'tenantId');
+      const page = args.query.page ?? 1;
+      const limit = Math.min(args.query.limit ?? 20, 200);
+      const skip = (page - 1) * limit;
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT
-          gs.id, gs.group_id, g.name AS group_name,
-          gs.period_type, gs.period_start, gs.period_end, gs.generated_at
-        FROM grade_snapshots gs
-        JOIN groups g ON g.id = gs.group_id
-        WHERE gs.tenant_id=${tenantId}
-          ${groupId ? Prisma.sql`AND gs.group_id=${groupId}` : Prisma.empty}
-          ${periodType ? Prisma.sql`AND gs.period_type=${periodType}` : Prisma.empty}
-        ORDER BY gs.generated_at DESC, gs.id DESC
-        LIMIT 50
-      `,
-    );
+      const where: Prisma.grade_snapshotsWhereInput = {
+        tenant_id: tenantId,
+      };
 
-    return { data: rows };
+      if (args.query.groupId) {
+        where.group_id = toBigInt(args.query.groupId, 'groupId');
+      }
+      if (args.query.periodType) {
+        where.period_type = args.query.periodType;
+      }
+
+      const [total, items] = await this.prisma.$transaction([
+        this.prisma.grade_snapshots.count({ where }),
+        this.prisma.grade_snapshots.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { generated_at: 'desc' },
+          include: {
+            groups: { select: { name: true } },
+            _count: { select: { grade_snapshot_rows: true } },
+          },
+        }),
+      ]);
+
+      return {
+        data: items.map((s) => ({
+          id: s.id.toString(),
+          groupId: s.group_id.toString(),
+          groupName: s.groups.name,
+          periodType: s.period_type,
+          periodStart: s.period_start,
+          periodEnd: s.period_end,
+          generatedAt: s.generated_at,
+          rowsCount: s._count.grade_snapshot_rows,
+        })),
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1,
+        },
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
+
+  // ---------- Snapshot rows ----------
 
   async snapshotRows(args: { tenantId: string; snapshotId: string }) {
-    const tenantId = BigInt(args.tenantId);
-    const snapshotId = BigInt(args.snapshotId);
+    try {
+      const tenantId = toBigInt(args.tenantId, 'tenantId');
+      const snapshotId = toBigInt(args.snapshotId, 'snapshotId');
 
-    const s = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`SELECT id FROM grade_snapshots WHERE tenant_id=${tenantId} AND id=${snapshotId} LIMIT 1`,
-    );
-    if (!s.length) throw new BadRequestException('SNAPSHOT_NOT_FOUND');
+      const snapshot = await this.prisma.grade_snapshots.findFirst({
+        where: { id: snapshotId, tenant_id: tenantId },
+      });
+      if (!snapshot) throw new NotFoundException('SNAPSHOT_NOT_FOUND');
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT
-          r.student_id,
-          st.full_name,
-          r.total_score,
-          r.rank,
-          r.risk_level
-        FROM grade_snapshot_rows r
-        JOIN students st ON st.id = r.student_id
-        WHERE r.snapshot_id=${snapshotId}
-        ORDER BY r.rank ASC
-        LIMIT 300
-      `,
-    );
+      const rows = await this.prisma.grade_snapshot_rows.findMany({
+        where: { snapshot_id: snapshotId },
+        include: { students: { select: { full_name: true } } },
+        orderBy: { rank: 'asc' },
+      });
 
-    return { data: rows };
+      return {
+        snapshotId: snapshotId.toString(),
+        rows: rows.map((r) => ({
+          studentId: r.student_id.toString(),
+          studentName: r.students.full_name,
+          totalScore: r.total_score,
+          rank: r.rank,
+          riskLevel: r.risk_level,
+        })),
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 
+  // ---------- Guardian: latest snapshot for student ----------
+
   async guardianLatest(args: { studentAccountId: string; periodType: string }) {
-    const studentAccountId = BigInt(args.studentAccountId);
-    const periodType = String(args.periodType || 'WEEK');
+    try {
+      const studentAccountId = toBigInt(
+        args.studentAccountId,
+        'studentAccountId',
+      );
 
-    const base = await this.prisma.$queryRaw<
-      {
-        student_id: bigint;
-        tenant_id: bigint;
-        current_group_id: bigint | null;
-      }[]
-    >(
-      Prisma.sql`
-        SELECT s.id AS student_id, s.tenant_id, s.current_group_id
-        FROM student_accounts sa
-        JOIN students s ON s.id = sa.student_id
-        WHERE sa.id=${studentAccountId}
-        LIMIT 1
-      `,
-    );
-    if (!base.length) throw new BadRequestException('ACCOUNT_NOT_FOUND');
-    if (!base[0].current_group_id) return { snapshot: null, me: null, top: [] };
+      // Get student info via guardian account
+      const account = await this.prisma.student_accounts.findUnique({
+        where: { id: studentAccountId },
+        include: { students: { include: { groups: true } } },
+      });
+      if (!account) throw new NotFoundException('GUARDIAN_ACCOUNT_NOT_FOUND');
 
-    const tenantId = base[0].tenant_id;
-    const studentId = base[0].student_id;
-    const groupId = base[0].current_group_id;
+      const student = account.students;
+      if (!student.current_group_id) {
+        return { snapshot: null, me: null, top: [] };
+      }
 
-    const snap = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT id, period_start, period_end, generated_at
-        FROM grade_snapshots
-        WHERE tenant_id=${tenantId} AND group_id=${groupId} AND period_type=${periodType}
-        ORDER BY generated_at DESC, id DESC
-        LIMIT 1
-      `,
-    );
-    if (!snap.length) return { snapshot: null, me: null, top: [] };
+      const groupId = student.current_group_id;
+      const tenantId = student.tenant_id;
 
-    const snapshotId = snap[0].id;
+      // Find latest snapshot for that group and period type
+      const snapshot = await this.prisma.grade_snapshots.findFirst({
+        where: {
+          tenant_id: tenantId,
+          group_id: groupId,
+          period_type: args.periodType,
+        },
+        orderBy: { generated_at: 'desc' },
+        select: {
+          id: true,
+          period_start: true,
+          period_end: true,
+          generated_at: true,
+        },
+      });
 
-    const me = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT total_score, rank, risk_level
-        FROM grade_snapshot_rows
-        WHERE snapshot_id=${snapshotId} AND student_id=${studentId}
-        LIMIT 1
-      `,
-    );
+      if (!snapshot) {
+        return { snapshot: null, me: null, top: [] };
+      }
 
-    const top = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT r.rank, r.total_score, st.full_name
-        FROM grade_snapshot_rows r
-        JOIN students st ON st.id=r.student_id
-        WHERE r.snapshot_id=${snapshotId}
-        ORDER BY r.rank ASC
-        LIMIT 10
-      `,
-    );
+      // Get student's own row
+      const myRow = await this.prisma.grade_snapshot_rows.findFirst({
+        where: {
+          snapshot_id: snapshot.id,
+          student_id: student.id,
+        },
+        select: {
+          total_score: true,
+          rank: true,
+          risk_level: true,
+        },
+      });
 
-    return {
-      snapshot: {
-        id: snapshotId.toString(),
-        periodStart: String(snap[0].period_start),
-        periodEnd: String(snap[0].period_end),
-        generatedAt: String(snap[0].generated_at),
-      },
-      me: me.length ? me[0] : null,
-      top,
-    };
+      // Get top 10
+      const topRows = await this.prisma.grade_snapshot_rows.findMany({
+        where: { snapshot_id: snapshot.id },
+        orderBy: { rank: 'asc' },
+        take: 10,
+        include: { students: { select: { full_name: true } } },
+      });
+
+      return {
+        snapshot: {
+          id: snapshot.id.toString(),
+          periodStart: snapshot.period_start,
+          periodEnd: snapshot.period_end,
+          generatedAt: snapshot.generated_at,
+        },
+        me: myRow
+          ? {
+              totalScore: myRow.total_score,
+              rank: myRow.rank,
+              riskLevel: myRow.risk_level,
+            }
+          : null,
+        top: topRows.map((r) => ({
+          rank: r.rank,
+          totalScore: r.total_score,
+          studentName: r.students.full_name,
+        })),
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 }

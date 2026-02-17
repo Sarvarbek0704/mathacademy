@@ -1,5 +1,6 @@
+// apps/api/src/modules/notifications/dto/list-templates.query.dto.ts
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString, Matches } from 'class-validator';
 
 export class ListNotificationTemplatesQueryDto {
   @ApiPropertyOptional()
@@ -21,10 +22,12 @@ export class ListNotificationTemplatesQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @Matches(/^\d+$/)
   limit?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @Matches(/^\d+$/)
   offset?: string;
 }

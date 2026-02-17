@@ -1,16 +1,31 @@
+// apps/api/src/modules/displays/dto/create-playlist.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreatePlaylistDto {
-  @ApiProperty({ example: 'Main Playlist' })
+  @ApiProperty({
+    example: 'Main Playlist',
+    description: 'Playlist name (min 3, max 100 chars)',
+  })
   @IsString()
+  @MinLength(3)
+  @MaxLength(100)
   name!: string;
 
   @ApiPropertyOptional({
     example: true,
-    description: 'make this playlist default for the display',
+    description: 'Make this playlist the default for the display',
+    default: false,
   })
   @IsOptional()
+  @Type(() => Boolean)
   @IsBoolean()
-  isDefault?: boolean;
+  isDefault?: boolean = false;
 }

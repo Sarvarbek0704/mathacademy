@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsNotEmpty,
+  IsOptional,
   IsString,
   Matches,
   MaxLength,
@@ -52,6 +53,7 @@ export class StaffLoginDto {
     description: 'Optional device identifier for session tracking',
   })
   @IsString()
+  @IsOptional()
   @MaxLength(255)
   deviceId?: string;
 }

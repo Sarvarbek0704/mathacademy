@@ -1,22 +1,39 @@
+// apps/api/src/modules/certificates/certificates.controller.ts
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
+  Patch,
   Post,
   Query,
   Req,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../../prisma/prisma.service';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiQuery,
+} from '@nestjs/swagger';
+
 import { PermissionsGuard } from '../../common/guards/perms.guard';
 import { RequirePermissions } from '../../common/decorators/perms.decorator';
 import { AccessGuard } from '../../common/guards/access.guard';
+import { ParseBigIntPipe } from '../../common/pipes/parse-bigint.pipe';
+
 import { CertificatesService } from './certificates.service';
 import { CreateCertificateDto } from './dto/create-certificate.dto';
+import { UpdateCertificateDto } from './dto/update-certificate.dto';
 import { SetOutcomeDto } from './dto/set-outcome.dto';
+import {
+  CertificateListQueryDto,
+  OutcomeListQueryDto,
+} from './dto/certificate-list.query.dto';
 
 @ApiTags('Staff - Certificates')
 @ApiBearerAuth('access-token')
@@ -25,37 +42,95 @@ import { SetOutcomeDto } from './dto/set-outcome.dto';
 export class CertificatesController {
   constructor(private readonly svc: CertificatesService) {}
 
-  @RequirePermissions('certificates.write')
+  private tenantId(req: any): string {
+    return String(req.user?.tenantId || '');
+  }
+
+  private userId(req: any): string {
+    return String(req.user?.userId || '');
+  }
+
+  private ip(req: any): string | undefined {
+    const xf = String(req.headers?.['x-forwarded-for'] || '')
+      .split(',')[0]
+      ?.trim();
+    return xf || req.ip || req.connection?.remoteAddress || undefined;
+  }
+
   @Post()
+  @RequirePermissions('certificates.write')
+  @ApiOperation({ summary: 'Create new certificate' })
+  @ApiResponse({ status: 201, description: 'Certificate created' })
   create(@Req() req: any, @Body() dto: CreateCertificateDto) {
     return this.svc.createCertificate({
-      tenantId: String(req.user?.tenantId || ''),
+      tenantId: this.tenantId(req),
+      userId: this.userId(req),
       dto,
+      ipAddress: this.ip(req),
     });
   }
 
-  @RequirePermissions('certificates.read')
-  @ApiQuery({ name: 'studentId', required: false })
-  @ApiQuery({ name: 'groupId', required: false })
-  @ApiQuery({ name: 'q', required: false })
-  @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'offset', required: false })
   @Get()
-  list(
-    @Req() req: any,
-    @Query('studentId') studentId?: string,
-    @Query('groupId') groupId?: string,
-    @Query('q') q?: string,
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-  ) {
+  @RequirePermissions('certificates.read')
+  @ApiOperation({ summary: 'List certificates' })
+  list(@Req() req: any, @Query() query: CertificateListQueryDto) {
     return this.svc.listCertificates({
-      tenantId: String(req.user?.tenantId || ''),
-      studentId,
+      tenantId: this.tenantId(req),
+      query,
+    });
+  }
+
+  @Get('statistics')
+  @RequirePermissions('certificates.read')
+  @ApiOperation({ summary: 'Get certificates and outcomes statistics' })
+  @ApiQuery({ name: 'groupId', required: false })
+  getStatistics(@Req() req: any, @Query('groupId') groupId?: string) {
+    return this.svc.getStatistics({
+      tenantId: this.tenantId(req),
       groupId,
-      q,
-      limit,
-      offset,
+    });
+  }
+
+  @Get(':id')
+  @RequirePermissions('certificates.read')
+  @ApiOperation({ summary: 'Get certificate by ID' })
+  @ApiParam({ name: 'id', description: 'Certificate ID' })
+  getById(@Req() req: any, @Param('id', ParseBigIntPipe) id: bigint) {
+    return this.svc.getCertificateById({
+      tenantId: this.tenantId(req),
+      certificateId: id.toString(),
+    });
+  }
+
+  @Patch(':id')
+  @RequirePermissions('certificates.write')
+  @ApiOperation({ summary: 'Update certificate' })
+  @ApiParam({ name: 'id', description: 'Certificate ID' })
+  update(
+    @Req() req: any,
+    @Param('id', ParseBigIntPipe) id: bigint,
+    @Body() dto: UpdateCertificateDto,
+  ) {
+    return this.svc.updateCertificate({
+      tenantId: this.tenantId(req),
+      certificateId: id.toString(),
+      userId: this.userId(req),
+      dto,
+      ipAddress: this.ip(req),
+    });
+  }
+
+  @Delete(':id')
+  @RequirePermissions('certificates.write')
+  @ApiOperation({ summary: 'Delete certificate' })
+  @ApiParam({ name: 'id', description: 'Certificate ID' })
+  @ApiResponse({ status: 200, description: 'Certificate deleted' })
+  delete(@Req() req: any, @Param('id', ParseBigIntPipe) id: bigint) {
+    return this.svc.deleteCertificate({
+      tenantId: this.tenantId(req),
+      certificateId: id.toString(),
+      userId: this.userId(req),
+      ipAddress: this.ip(req),
     });
   }
 }
@@ -67,29 +142,70 @@ export class CertificatesController {
 export class OutcomesController {
   constructor(private readonly svc: CertificatesService) {}
 
-  @RequirePermissions('outcomes.write')
+  private tenantId(req: any): string {
+    return String(req.user?.tenantId || '');
+  }
+
+  private userId(req: any): string {
+    return String(req.user?.userId || '');
+  }
+
+  private ip(req: any): string | undefined {
+    const xf = String(req.headers?.['x-forwarded-for'] || '')
+      .split(',')[0]
+      ?.trim();
+    return xf || req.ip || req.connection?.remoteAddress || undefined;
+  }
+
   @Post()
+  @RequirePermissions('outcomes.write')
+  @ApiOperation({ summary: 'Set or update student outcome' })
   set(@Req() req: any, @Body() dto: SetOutcomeDto) {
     return this.svc.setOutcome({
-      tenantId: String(req.user?.tenantId || ''),
-      userId: String(req.user?.userId || ''),
+      tenantId: this.tenantId(req),
+      userId: this.userId(req),
       dto,
+      ipAddress: this.ip(req),
     });
   }
 
-  @RequirePermissions('outcomes.read')
-  @ApiQuery({ name: 'studentId', required: false })
-  @ApiQuery({ name: 'groupId', required: false })
   @Get()
-  list(
-    @Req() req: any,
-    @Query('studentId') studentId?: string,
-    @Query('groupId') groupId?: string,
-  ) {
+  @RequirePermissions('outcomes.read')
+  @ApiOperation({ summary: 'List outcomes' })
+  list(@Req() req: any, @Query() query: OutcomeListQueryDto) {
     return this.svc.listOutcomes({
-      tenantId: String(req.user?.tenantId || ''),
-      studentId,
-      groupId,
+      tenantId: this.tenantId(req),
+      query,
+    });
+  }
+
+  @Get('student/:studentId')
+  @RequirePermissions('outcomes.read')
+  @ApiOperation({ summary: 'Get outcome by student ID' })
+  @ApiParam({ name: 'studentId', description: 'Student ID' })
+  getByStudentId(
+    @Req() req: any,
+    @Param('studentId', ParseBigIntPipe) studentId: bigint,
+  ) {
+    return this.svc.getOutcomeByStudentId({
+      tenantId: this.tenantId(req),
+      studentId: studentId.toString(),
+    });
+  }
+
+  @Delete('student/:studentId')
+  @RequirePermissions('outcomes.write')
+  @ApiOperation({ summary: 'Delete outcome' })
+  @ApiParam({ name: 'studentId', description: 'Student ID' })
+  delete(
+    @Req() req: any,
+    @Param('studentId', ParseBigIntPipe) studentId: bigint,
+  ) {
+    return this.svc.deleteOutcome({
+      tenantId: this.tenantId(req),
+      studentId: studentId.toString(),
+      userId: this.userId(req),
+      ipAddress: this.ip(req),
     });
   }
 }
@@ -102,6 +218,7 @@ export class GuardianCertificatesController {
   constructor(private readonly svc: CertificatesService) {}
 
   @Get()
+  @ApiOperation({ summary: 'Get my certificates' })
   my(@Req() req: any) {
     const user = req.user;
     if (!user || user.type !== 'GUARDIAN')
@@ -120,6 +237,7 @@ export class GuardianOutcomeController {
   constructor(private readonly svc: CertificatesService) {}
 
   @Get()
+  @ApiOperation({ summary: 'Get my outcome' })
   my(@Req() req: any) {
     const user = req.user;
     if (!user || user.type !== 'GUARDIAN')

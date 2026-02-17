@@ -1,33 +1,25 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { PartialType, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import {
-  IsBoolean,
-  IsDateString,
-  IsOptional,
-  IsString,
-  MinLength,
-} from 'class-validator';
+import { IsBoolean, IsDateString, IsOptional } from 'class-validator';
+import { CreateAcademicYearDto } from './create-academic-year.dto';
 
-export class UpdateAcademicYearDto {
-  @ApiPropertyOptional({ example: '2026-2027' })
-  @IsOptional()
-  @IsString()
-  @MinLength(3)
-  name?: string;
-
-  @ApiPropertyOptional({ example: '2026-09-01', description: 'YYYY-MM-DD' })
-  @IsOptional()
-  @IsDateString()
-  startDate?: string;
-
-  @ApiPropertyOptional({ example: '2027-06-30', description: 'YYYY-MM-DD' })
-  @IsOptional()
-  @IsDateString()
-  endDate?: string;
-
-  @ApiPropertyOptional({ example: true })
+export class UpdateAcademicYearDto extends PartialType(CreateAcademicYearDto) {
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Set/unset current year flag. If true, others become false.',
+  })
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
-  isCurrent?: boolean;
+  override isCurrent?: boolean;
+
+  @ApiPropertyOptional({ example: '2026-09-05' })
+  @IsOptional()
+  @IsDateString()
+  override startDate?: string;
+
+  @ApiPropertyOptional({ example: '2027-06-10' })
+  @IsOptional()
+  @IsDateString()
+  override endDate?: string;
 }

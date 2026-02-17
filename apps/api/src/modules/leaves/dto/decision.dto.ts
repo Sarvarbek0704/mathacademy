@@ -1,9 +1,14 @@
+// apps/api/src/modules/leaves/dto/decision.dto.ts
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class LeaveDecisionDto {
-  @ApiPropertyOptional({ example: 'Izoh...' })
+  @ApiPropertyOptional({
+    example: 'Approved by admin',
+    description: 'Decision notes (max 500 chars)',
+  })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   notes?: string;
 }

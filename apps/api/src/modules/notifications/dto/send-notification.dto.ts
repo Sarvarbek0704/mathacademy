@@ -1,5 +1,35 @@
+// apps/api/src/modules/notifications/dto/send-notification.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsObject, IsOptional, IsString } from 'class-validator';
+import {
+  IsIn,
+  IsObject,
+  IsOptional,
+  IsString,
+  ValidateNested,
+  Matches,
+  ValidateIf,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+class NotificationRecipientDto {
+  @ApiPropertyOptional({
+    example: '1',
+    description: 'Staff user ID (numeric string)',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d+$/, { message: 'userId must be numeric string' })
+  userId?: string;
+
+  @ApiPropertyOptional({
+    example: '1',
+    description: 'Guardian account ID (numeric string)',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d+$/, { message: 'studentAccountId must be numeric string' })
+  studentAccountId?: string;
+}
 
 export class SendNotificationDto {
   @ApiProperty({ example: 'IN_APP', enum: ['IN_APP', 'TELEGRAM_BOT', 'SMS'] })
@@ -13,19 +43,20 @@ export class SendNotificationDto {
   templateCode?: string;
 
   @ApiPropertyOptional({ example: 'Manual title' })
-  @IsOptional()
+  @ValidateIf((o) => !o.templateCode)
   @IsString()
   title?: string;
 
   @ApiPropertyOptional({ example: 'Manual body' })
-  @IsOptional()
+  @ValidateIf((o) => !o.templateCode)
   @IsString()
   body?: string;
 
-  @ApiPropertyOptional({ example: { userId: '1' } })
+  @ApiPropertyOptional({ type: NotificationRecipientDto })
   @IsOptional()
-  @IsObject()
-  to?: { userId?: string; studentAccountId?: string };
+  @ValidateNested()
+  @Type(() => NotificationRecipientDto)
+  to?: NotificationRecipientDto;
 
   @ApiPropertyOptional({ example: { name: 'Math Battle', date: '2026-02-12' } })
   @IsOptional()

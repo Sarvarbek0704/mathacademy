@@ -1,234 +1,831 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+// apps/api/src/modules/events/events.service.ts
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditLogger } from '../../common/utils/audit.util';
+import { rethrowServiceError } from '../../common/utils/service-error.util';
+
+import { CreateEventDto } from './dto/create-event.dto';
+import { UpdateEventDto } from './dto/update-event.dto';
+import { SetParticipantsDto } from './dto/set-participants.dto';
+import { EventListQueryDto } from './dto/event-list.query.dto';
+import { GuardianEventQueryDto } from './dto/guardian-event.query.dto';
+
+function toBigInt(value: unknown, field = 'id'): bigint {
+  const s = String(value ?? '').trim();
+  if (!/^\d+$/.test(s) || s === '0')
+    throw new BadRequestException(`INVALID_${field.toUpperCase()}`);
+  return BigInt(s);
+}
 
 @Injectable()
 export class EventsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly auditLogger: AuditLogger;
 
-  async create(args: { tenantId: string; userId: string; dto: any }) {
-    const tenantId = BigInt(args.tenantId);
-    const userId = args.userId ? BigInt(args.userId) : null;
-
-    const title = String(args.dto.title || '').trim();
-    if (!title) throw new BadRequestException('TITLE_REQUIRED');
-
-    const campusId = args.dto.campusId ? BigInt(args.dto.campusId) : null;
-
-    const eventType = String(args.dto.eventType || 'OTHER');
-    const allowedTypes = ['MOVIE_TIME', 'TOURNAMENT', 'MEETING', 'OTHER'];
-    if (!allowedTypes.includes(eventType))
-      throw new BadRequestException('INVALID_EVENT_TYPE');
-
-    const startsAt = String(args.dto.startsAt);
-    const endsAt = args.dto.endsAt ? String(args.dto.endsAt) : null;
-    const description = args.dto.description
-      ? String(args.dto.description)
-      : null;
-
-    if (campusId) {
-      const c = await this.prisma.$queryRaw<{ id: bigint }[]>(
-        Prisma.sql`SELECT id FROM campuses WHERE tenant_id=${tenantId} AND id=${campusId} LIMIT 1`,
-      );
-      if (!c.length) throw new BadRequestException('CAMPUS_NOT_FOUND');
-    }
-
-    const rows = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`
-        INSERT INTO events (
-          tenant_id, campus_id, title, event_type, starts_at, ends_at, description, created_by_user_id
-        )
-        VALUES (
-          ${tenantId}, ${campusId}, ${title}, ${eventType},
-          ${startsAt}::timestamptz,
-          ${endsAt ? Prisma.sql`${endsAt}::timestamptz` : Prisma.sql`NULL`},
-          ${description},
-          ${userId}
-        )
-        RETURNING id
-      `,
-    );
-
-    return { id: rows[0].id.toString() };
+  constructor(private readonly prisma: PrismaService) {
+    this.auditLogger = new AuditLogger(prisma);
   }
 
-  async list(args: {
+  // ==================== EVENTS ====================
+
+  async create(args: {
     tenantId: string;
-    from?: string;
-    to?: string;
-    q?: string;
-    campusId?: string;
-    eventType?: string;
-    limit?: string;
-    offset?: string;
+    userId: string;
+    dto: CreateEventDto;
+    ipAddress?: string;
   }) {
-    const tenantId = BigInt(args.tenantId);
-    const from = args.from ? String(args.from) : null;
-    const to = args.to ? String(args.to) : null;
-    const q = args.q ? String(args.q).trim() : null;
-    const campusId = args.campusId ? BigInt(args.campusId) : null;
-    const eventType = args.eventType ? String(args.eventType) : null;
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const created_by_user_id = args.userId
+        ? toBigInt(args.userId, 'userId')
+        : null;
 
-    const limit = Math.min(Math.max(Number(args.limit || 50), 1), 200);
-    const offset = Math.max(Number(args.offset || 0), 0);
+      return await this.prisma.$transaction(async (tx) => {
+        // Validate campus if provided
+        let campus_id: bigint | null = null;
+        if (args.dto.campusId) {
+          campus_id = toBigInt(args.dto.campusId, 'campusId');
+          const campus = await tx.campuses.findFirst({
+            where: { id: campus_id, tenant_id },
+          });
+          if (!campus) throw new NotFoundException('CAMPUS_NOT_FOUND');
+        }
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT
-          e.id::text AS id,
-          e.campus_id::text AS campus_id,
-          e.title,
-          e.event_type,
-          e.starts_at,
-          e.ends_at,
-          e.description,
-          e.created_by_user_id::text AS created_by_user_id,
-          e.created_at
-        FROM events e
-        WHERE e.tenant_id=${tenantId}
-          ${campusId ? Prisma.sql`AND e.campus_id=${campusId}` : Prisma.empty}
-          ${eventType ? Prisma.sql`AND e.event_type=${eventType}` : Prisma.empty}
-          ${from ? Prisma.sql`AND e.starts_at >= ${from}::timestamptz` : Prisma.empty}
-          ${to ? Prisma.sql`AND (COALESCE(e.ends_at, e.starts_at) <= ${to}::timestamptz)` : Prisma.empty}
-          ${
-            q
-              ? Prisma.sql`AND (e.title ILIKE ${'%' + q + '%'} OR COALESCE(e.description,'') ILIKE ${'%' + q + '%'})`
-              : Prisma.empty
+        // Validate dates
+        const starts_at = new Date(args.dto.startsAt);
+        if (isNaN(starts_at.getTime())) {
+          throw new BadRequestException('INVALID_STARTS_AT');
+        }
+
+        let ends_at: Date | null = null;
+        if (args.dto.endsAt) {
+          ends_at = new Date(args.dto.endsAt);
+          if (isNaN(ends_at.getTime())) {
+            throw new BadRequestException('INVALID_ENDS_AT');
           }
-        ORDER BY e.starts_at DESC, e.id DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `,
-    );
+          if (ends_at <= starts_at) {
+            throw new BadRequestException('ENDS_AT_MUST_BE_AFTER_STARTS_AT');
+          }
+        }
 
-    return { data: rows, meta: { limit, offset } };
-  }
+        const event = await tx.events.create({
+          data: {
+            tenant_id,
+            campus_id,
+            title: args.dto.title.trim(),
+            event_type: args.dto.eventType ?? 'OTHER',
+            starts_at,
+            ends_at,
+            description: args.dto.description?.trim() || null,
+            created_by_user_id,
+          },
+          include: {
+            campuses: true,
+            users: {
+              select: { full_name: true },
+            },
+          },
+        });
 
-  async setParticipants(args: { tenantId: string; eventId: string; dto: any }) {
-    const tenantId = BigInt(args.tenantId);
-    const eventId = BigInt(args.eventId);
+        await this.auditLogger.log({
+          tenantId: tenant_id,
+          actorType: 'STAFF',
+          actorUserId: created_by_user_id,
+          action: 'CREATE',
+          entityType: 'events',
+          entityId: event.id,
+          afterData: {
+            id: event.id.toString(),
+            title: event.title,
+            startsAt: event.starts_at,
+            campus: event.campuses?.name || null,
+          },
+          ipAddress: args.ipAddress,
+        });
 
-    const studentIds: string[] = Array.isArray(args.dto.studentIds)
-      ? args.dto.studentIds
-      : [];
-    const role = args.dto.role ? String(args.dto.role) : 'PARTICIPANT';
-    const groupId = args.dto.groupId ? BigInt(args.dto.groupId) : null;
-
-    const e = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`SELECT id FROM events WHERE tenant_id=${tenantId} AND id=${eventId} LIMIT 1`,
-    );
-    if (!e.length) throw new BadRequestException('EVENT_NOT_FOUND');
-
-    if (groupId) {
-      const g = await this.prisma.$queryRaw<{ id: bigint }[]>(
-        Prisma.sql`SELECT id FROM groups WHERE tenant_id=${tenantId} AND id=${groupId} LIMIT 1`,
-      );
-      if (!g.length) throw new BadRequestException('GROUP_NOT_FOUND');
+        return {
+          id: event.id.toString(),
+          title: event.title,
+          eventType: event.event_type,
+          startsAt: event.starts_at,
+          endsAt: event.ends_at,
+          campusId: event.campus_id?.toString() || null,
+          campusName: event.campuses?.name || null,
+          description: event.description,
+          createdBy: event.users?.full_name || null,
+          createdAt: event.created_at,
+        };
+      });
+    } catch (error) {
+      rethrowServiceError(error);
     }
+  }
 
-    // replace strategy
-    await this.prisma.$executeRaw(
-      Prisma.sql`DELETE FROM event_participants WHERE event_id=${eventId}`,
-    );
+  async list(args: { tenantId: string; query: EventListQueryDto }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const page = args.query.page ?? 1;
+      const limit = Math.min(args.query.limit ?? 20, 200);
+      const skip = (page - 1) * limit;
 
-    if (!studentIds.length) return { ok: true, added: 0 };
+      const where: Prisma.eventsWhereInput = {
+        tenant_id,
+      };
 
-    const ids = studentIds.map((x) => BigInt(x));
+      if (args.query.campusId) {
+        where.campus_id = toBigInt(args.query.campusId, 'campusId');
+      }
 
-    const allowed = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`
-        SELECT id
-        FROM students
-        WHERE tenant_id=${tenantId}
-          ${groupId ? Prisma.sql`AND current_group_id=${groupId}` : Prisma.empty}
-          AND id IN (${Prisma.join(ids)})
-      `,
-    );
+      if (args.query.eventType) {
+        where.event_type = args.query.eventType;
+      }
 
-    for (const r of allowed) {
-      await this.prisma.$executeRaw(
-        Prisma.sql`
-          INSERT INTO event_participants (event_id, student_id, role)
-          VALUES (${eventId}, ${r.id}, ${role})
-        `,
-      );
+      if (args.query.from || args.query.to) {
+        where.starts_at = {};
+        if (args.query.from) {
+          where.starts_at.gte = new Date(args.query.from);
+        }
+        if (args.query.to) {
+          where.starts_at.lte = new Date(args.query.to);
+        }
+      }
+
+      if (args.query.q) {
+        const search = args.query.q.trim();
+        where.OR = [
+          { title: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } },
+        ];
+      }
+
+      const orderBy: Prisma.eventsOrderByWithRelationInput = {};
+      if (args.query.sortBy === 'startsAt') {
+        orderBy.starts_at = args.query.sortDir ?? 'desc';
+      } else if (args.query.sortBy === 'createdAt') {
+        (orderBy as any).created_at = args.query.sortDir ?? 'desc';
+      } else if (args.query.sortBy === 'title') {
+        orderBy.title = args.query.sortDir ?? 'desc';
+      } else {
+        orderBy.starts_at = 'desc';
+      }
+
+      const [total, items] = await this.prisma.$transaction([
+        this.prisma.events.count({ where }),
+        this.prisma.events.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy,
+          include: {
+            campuses: true,
+            users: { select: { full_name: true } },
+            _count: {
+              select: { event_participants: true },
+            },
+          },
+        }),
+      ]);
+
+      return {
+        data: items.map((e) => ({
+          id: e.id.toString(),
+          title: e.title,
+          eventType: e.event_type,
+          startsAt: e.starts_at,
+          endsAt: e.ends_at,
+          campusId: e.campus_id?.toString() || null,
+          campusName: e.campuses?.name || null,
+          description: e.description,
+          createdBy: e.users?.full_name || null,
+          createdAt: e.created_at,
+          participantsCount: e._count.event_participants,
+        })),
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1,
+        },
+      };
+    } catch (error) {
+      rethrowServiceError(error);
     }
-
-    return { ok: true, added: allowed.length };
   }
 
-  async participants(args: { tenantId: string; eventId: string }) {
-    const tenantId = BigInt(args.tenantId);
-    const eventId = BigInt(args.eventId);
+  async getDetail(args: { tenantId: string; eventId: string }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const event_id = toBigInt(args.eventId, 'eventId');
 
-    const e = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`SELECT id FROM events WHERE tenant_id=${tenantId} AND id=${eventId} LIMIT 1`,
-    );
-    if (!e.length) throw new BadRequestException('EVENT_NOT_FOUND');
+      const event = await this.prisma.events.findFirst({
+        where: { id: event_id, tenant_id },
+        include: {
+          campuses: true,
+          users: { select: { full_name: true } },
+          event_participants: {
+            include: {
+              students: {
+                select: {
+                  id: true,
+                  full_name: true,
+                  current_group_id: true,
+                  groups: { select: { name: true } },
+                },
+              },
+            },
+            orderBy: { student_id: 'asc' },
+          },
+          _count: {
+            select: { event_participants: true },
+          },
+        },
+      });
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT
-          ep.student_id::text AS student_id,
-          st.full_name,
-          st.current_group_id::text AS group_id,
-          ep.role
-        FROM event_participants ep
-        JOIN students st ON st.id = ep.student_id
-        WHERE ep.event_id=${eventId}
-        ORDER BY st.id ASC
-      `,
-    );
+      if (!event) {
+        throw new NotFoundException('EVENT_NOT_FOUND');
+      }
 
-    return { data: rows };
+      return {
+        id: event.id.toString(),
+        title: event.title,
+        eventType: event.event_type,
+        startsAt: event.starts_at,
+        endsAt: event.ends_at,
+        campusId: event.campus_id?.toString() || null,
+        campusName: event.campuses?.name || null,
+        description: event.description,
+        createdBy: event.users?.full_name || null,
+        createdAt: event.created_at,
+        participantsCount: event._count.event_participants,
+        participants: event.event_participants.map((p) => ({
+          studentId: p.student_id.toString(),
+          studentName: p.students.full_name,
+          groupId: p.students.current_group_id?.toString() || null,
+          groupName: p.students.groups?.name || null,
+          role: p.role,
+        })),
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
+
+  async update(args: {
+    tenantId: string;
+    eventId: string;
+    userId: string;
+    dto: UpdateEventDto;
+    ipAddress?: string;
+  }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const event_id = toBigInt(args.eventId, 'eventId');
+      const updated_by_user_id = args.userId
+        ? toBigInt(args.userId, 'userId')
+        : null;
+
+      return await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.events.findFirst({
+          where: { id: event_id, tenant_id },
+          include: { campuses: true },
+        });
+        if (!existing) throw new NotFoundException('EVENT_NOT_FOUND');
+
+        const updateData: Prisma.eventsUpdateInput = {};
+
+        if (args.dto.title !== undefined) {
+          updateData.title = args.dto.title.trim();
+        }
+        if (args.dto.campusId !== undefined) {
+          if (args.dto.campusId) {
+            const campus_id = toBigInt(args.dto.campusId, 'campusId');
+            const campus = await tx.campuses.findFirst({
+              where: { id: campus_id, tenant_id },
+            });
+            if (!campus) throw new NotFoundException('CAMPUS_NOT_FOUND');
+            updateData.campuses = { connect: { id: campus_id } };
+          } else {
+            updateData.campuses = { disconnect: true };
+          }
+        }
+        if (args.dto.eventType !== undefined) {
+          updateData.event_type = args.dto.eventType;
+        }
+        if (args.dto.startsAt !== undefined) {
+          const starts_at = new Date(args.dto.startsAt);
+          if (isNaN(starts_at.getTime())) {
+            throw new BadRequestException('INVALID_STARTS_AT');
+          }
+          updateData.starts_at = starts_at;
+        }
+        if (args.dto.endsAt !== undefined) {
+          if (args.dto.endsAt === null || args.dto.endsAt === '') {
+            updateData.ends_at = null;
+          } else {
+            const ends_at = new Date(args.dto.endsAt);
+            if (isNaN(ends_at.getTime())) {
+              throw new BadRequestException('INVALID_ENDS_AT');
+            }
+            updateData.ends_at = ends_at;
+          }
+        }
+        if (args.dto.description !== undefined) {
+          updateData.description = args.dto.description?.trim() || null;
+        }
+
+        // Validate date order
+        const newStartsAt = updateData.starts_at ?? existing.starts_at;
+        const newEndsAt =
+          updateData.ends_at !== undefined
+            ? updateData.ends_at
+            : existing.ends_at;
+        if (newEndsAt && newEndsAt <= newStartsAt) {
+          throw new BadRequestException('ENDS_AT_MUST_BE_AFTER_STARTS_AT');
+        }
+
+        const updated = await tx.events.update({
+          where: { id: event_id },
+          data: updateData,
+          include: {
+            campuses: true,
+            users: { select: { full_name: true } },
+          },
+        });
+
+        await this.auditLogger.log({
+          tenantId: tenant_id,
+          actorType: 'STAFF',
+          actorUserId: updated_by_user_id,
+          action: 'UPDATE',
+          entityType: 'events',
+          entityId: event_id,
+          beforeData: {
+            id: existing.id.toString(),
+            title: existing.title,
+            startsAt: existing.starts_at,
+          },
+          afterData: {
+            id: updated.id.toString(),
+            title: updated.title,
+            startsAt: updated.starts_at,
+          },
+          ipAddress: args.ipAddress,
+        });
+
+        return {
+          id: updated.id.toString(),
+          title: updated.title,
+          eventType: updated.event_type,
+          startsAt: updated.starts_at,
+          endsAt: updated.ends_at,
+          campusId: updated.campus_id?.toString() || null,
+          campusName: updated.campuses?.name || null,
+          description: updated.description,
+        };
+      });
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
+
+  async delete(args: {
+    tenantId: string;
+    eventId: string;
+    userId: string;
+    ipAddress?: string;
+  }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const event_id = toBigInt(args.eventId, 'eventId');
+      const deleted_by_user_id = args.userId
+        ? toBigInt(args.userId, 'userId')
+        : null;
+
+      return await this.prisma.$transaction(async (tx) => {
+        const event = await tx.events.findFirst({
+          where: { id: event_id, tenant_id },
+        });
+        if (!event) throw new NotFoundException('EVENT_NOT_FOUND');
+
+        // Check if event has participants? We can cascade delete via Prisma schema.
+        // Optionally prevent deletion if participants exist.
+        const participantsCount = await tx.event_participants.count({
+          where: { event_id },
+        });
+        if (participantsCount > 0) {
+          throw new BadRequestException('EVENT_HAS_PARTICIPANTS');
+        }
+
+        await tx.events.delete({ where: { id: event_id } });
+
+        await this.auditLogger.log({
+          tenantId: tenant_id,
+          actorType: 'STAFF',
+          actorUserId: deleted_by_user_id,
+          action: 'DELETE',
+          entityType: 'events',
+          entityId: event_id,
+          beforeData: {
+            id: event.id.toString(),
+            title: event.title,
+          },
+          ipAddress: args.ipAddress,
+        });
+
+        return { ok: true, id: event_id.toString() };
+      });
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
+
+  // ==================== PARTICIPANTS ====================
+
+  async setParticipants(args: {
+    tenantId: string;
+    eventId: string;
+    userId: string;
+    dto: SetParticipantsDto;
+    ipAddress?: string;
+  }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const event_id = toBigInt(args.eventId, 'eventId');
+      const created_by_user_id = args.userId
+        ? toBigInt(args.userId, 'userId')
+        : null;
+
+      return await this.prisma.$transaction(async (tx) => {
+        // 1. Event exists
+        const event = await tx.events.findFirst({
+          where: { id: event_id, tenant_id },
+        });
+        if (!event) throw new NotFoundException('EVENT_NOT_FOUND');
+
+        // 2. If groupId provided, validate group
+        let group_id: bigint | null = null;
+        if (args.dto.groupId) {
+          group_id = toBigInt(args.dto.groupId, 'groupId');
+          const group = await tx.groups.findFirst({
+            where: { id: group_id, tenant_id },
+          });
+          if (!group) throw new NotFoundException('GROUP_NOT_FOUND');
+        }
+
+        // 3. Validate student IDs and filter by tenant and optionally group
+        const studentIds = args.dto.studentIds.map((id) =>
+          toBigInt(id, 'studentId'),
+        );
+        const studentWhere: Prisma.studentsWhereInput = {
+          tenant_id,
+          id: { in: studentIds },
+          archived_at: null,
+        };
+        if (group_id) {
+          studentWhere.current_group_id = group_id;
+        }
+
+        const validStudents = await tx.students.findMany({
+          where: studentWhere,
+          select: { id: true },
+        });
+
+        if (validStudents.length === 0) {
+          throw new BadRequestException('NO_VALID_STUDENTS');
+        }
+
+        // 4. Replace participants
+        await tx.event_participants.deleteMany({
+          where: { event_id },
+        });
+
+        const role = args.dto.role?.trim() || 'PARTICIPANT';
+        await tx.event_participants.createMany({
+          data: validStudents.map((s) => ({
+            event_id,
+            student_id: s.id,
+            role,
+          })),
+        });
+
+        await this.auditLogger.log({
+          tenantId: tenant_id,
+          actorType: 'STAFF',
+          actorUserId: created_by_user_id,
+          action: 'UPDATE',
+          entityType: 'event_participants',
+          entityId: event_id,
+          afterData: {
+            eventId: event_id.toString(),
+            eventTitle: event.title,
+            participantsCount: validStudents.length,
+          },
+          ipAddress: args.ipAddress,
+        });
+
+        return {
+          ok: true,
+          added: validStudents.length,
+          eventId: event_id.toString(),
+        };
+      });
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
+
+  async getParticipants(args: { tenantId: string; eventId: string }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const event_id = toBigInt(args.eventId, 'eventId');
+
+      const event = await this.prisma.events.findFirst({
+        where: { id: event_id, tenant_id },
+      });
+      if (!event) throw new NotFoundException('EVENT_NOT_FOUND');
+
+      const participants = await this.prisma.event_participants.findMany({
+        where: { event_id },
+        include: {
+          students: {
+            select: {
+              id: true,
+              full_name: true,
+              current_group_id: true,
+              groups: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { student_id: 'asc' },
+      });
+
+      return {
+        eventId: event_id.toString(),
+        participants: participants.map((p) => ({
+          studentId: p.student_id.toString(),
+          studentName: p.students.full_name,
+          groupId: p.students.current_group_id?.toString() || null,
+          groupName: p.students.groups?.name || null,
+          role: p.role,
+        })),
+        count: participants.length,
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
+
+  async addParticipants(args: {
+    tenantId: string;
+    eventId: string;
+    userId: string;
+    dto: SetParticipantsDto; // reuse same DTO, but will add to existing participants
+    ipAddress?: string;
+  }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const event_id = toBigInt(args.eventId, 'eventId');
+      const created_by_user_id = args.userId
+        ? toBigInt(args.userId, 'userId')
+        : null;
+
+      return await this.prisma.$transaction(async (tx) => {
+        const event = await tx.events.findFirst({
+          where: { id: event_id, tenant_id },
+        });
+        if (!event) throw new NotFoundException('EVENT_NOT_FOUND');
+
+        let group_id: bigint | null = null;
+        if (args.dto.groupId) {
+          group_id = toBigInt(args.dto.groupId, 'groupId');
+          const group = await tx.groups.findFirst({
+            where: { id: group_id, tenant_id },
+          });
+          if (!group) throw new NotFoundException('GROUP_NOT_FOUND');
+        }
+
+        const studentIds = args.dto.studentIds.map((id) =>
+          toBigInt(id, 'studentId'),
+        );
+        const studentWhere: Prisma.studentsWhereInput = {
+          tenant_id,
+          id: { in: studentIds },
+          archived_at: null,
+        };
+        if (group_id) {
+          studentWhere.current_group_id = group_id;
+        }
+
+        const validStudents = await tx.students.findMany({
+          where: studentWhere,
+          select: { id: true },
+        });
+
+        if (validStudents.length === 0) {
+          throw new BadRequestException('NO_VALID_STUDENTS');
+        }
+
+        const role = args.dto.role?.trim() || 'PARTICIPANT';
+
+        // Get existing participants to avoid duplicates
+        const existingParticipants = await tx.event_participants.findMany({
+          where: { event_id },
+          select: { student_id: true },
+        });
+        const existingStudentIds = new Set(
+          existingParticipants.map((ep) => ep.student_id.toString()),
+        );
+
+        const newParticipants = validStudents.filter(
+          (s) => !existingStudentIds.has(s.id.toString()),
+        );
+
+        if (newParticipants.length > 0) {
+          await tx.event_participants.createMany({
+            data: newParticipants.map((s) => ({
+              event_id,
+              student_id: s.id,
+              role,
+            })),
+          });
+        }
+
+        await this.auditLogger.log({
+          tenantId: tenant_id,
+          actorType: 'STAFF',
+          actorUserId: created_by_user_id,
+          action: 'UPDATE',
+          entityType: 'event_participants',
+          entityId: event_id,
+          afterData: {
+            eventId: event_id.toString(),
+            eventTitle: event.title,
+            addedCount: newParticipants.length,
+          },
+          ipAddress: args.ipAddress,
+        });
+
+        return {
+          ok: true,
+          added: newParticipants.length,
+          total: existingParticipants.length + newParticipants.length,
+        };
+      });
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
+
+  async removeParticipants(args: {
+    tenantId: string;
+    eventId: string;
+    userId: string;
+    studentIds: string[];
+    ipAddress?: string;
+  }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const event_id = toBigInt(args.eventId, 'eventId');
+      const deleted_by_user_id = args.userId
+        ? toBigInt(args.userId, 'userId')
+        : null;
+
+      return await this.prisma.$transaction(async (tx) => {
+        const event = await tx.events.findFirst({
+          where: { id: event_id, tenant_id },
+        });
+        if (!event) throw new NotFoundException('EVENT_NOT_FOUND');
+
+        const studentIds = args.studentIds.map((id) =>
+          toBigInt(id, 'studentId'),
+        );
+
+        const result = await tx.event_participants.deleteMany({
+          where: {
+            event_id,
+            student_id: { in: studentIds },
+          },
+        });
+
+        await this.auditLogger.log({
+          tenantId: tenant_id,
+          actorType: 'STAFF',
+          actorUserId: deleted_by_user_id,
+          action: 'UPDATE',
+          entityType: 'event_participants',
+          entityId: event_id,
+          afterData: {
+            eventId: event_id.toString(),
+            removedCount: result.count,
+          },
+          ipAddress: args.ipAddress,
+        });
+
+        return {
+          ok: true,
+          removed: result.count,
+        };
+      });
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
+
+  // ==================== GUARDIAN ====================
+
+  // apps/api/src/modules/events/events.service.ts - guardianList metodining to'g'ri versiyasi
+
+  // apps/api/src/modules/events/events.service.ts - guardianList metodining to'g'ri versiyasi
 
   async guardianList(args: {
     studentAccountId: string;
-    from?: string;
-    to?: string;
+    query: GuardianEventQueryDto;
   }) {
-    const studentAccountId = BigInt(args.studentAccountId);
-    const from = args.from ? String(args.from) : null;
-    const to = args.to ? String(args.to) : null;
+    try {
+      const student_account_id = toBigInt(
+        args.studentAccountId,
+        'studentAccountId',
+      );
 
-    const base = await this.prisma.$queryRaw<
-      { student_id: bigint; tenant_id: bigint }[]
-    >(
-      Prisma.sql`
-        SELECT sa.student_id, s.tenant_id
-        FROM student_accounts sa
-        JOIN students s ON s.id = sa.student_id
-        WHERE sa.id=${studentAccountId}
-        LIMIT 1
-      `,
-    );
-    if (!base.length) throw new BadRequestException('ACCOUNT_NOT_FOUND');
+      const account = await this.prisma.student_accounts.findUnique({
+        where: { id: student_account_id },
+        select: {
+          student_id: true,
+          tenant_id: true,
+          students: { select: { full_name: true } },
+        },
+      });
+      if (!account) throw new NotFoundException('GUARDIAN_ACCOUNT_NOT_FOUND');
 
-    const studentId = base[0].student_id;
-    const tenantId = base[0].tenant_id;
+      const studentId = account.student_id;
+      const tenantId = account.tenant_id;
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT
-          e.id::text AS id,
-          e.campus_id::text AS campus_id,
-          e.title,
-          e.event_type,
-          e.starts_at,
-          e.ends_at,
-          e.description,
-          ep.role
-        FROM event_participants ep
-        JOIN events e ON e.id = ep.event_id
-        WHERE ep.student_id=${studentId}
-          AND e.tenant_id=${tenantId}
-          ${from ? Prisma.sql`AND e.starts_at >= ${from}::timestamptz` : Prisma.empty}
-          ${to ? Prisma.sql`AND (COALESCE(e.ends_at, e.starts_at) <= ${to}::timestamptz)` : Prisma.empty}
-        ORDER BY e.starts_at DESC, e.id DESC
-        LIMIT 200
-      `,
-    );
+      const where: Prisma.event_participantsWhereInput = {
+        student_id: studentId,
+        events: {
+          tenant_id: tenantId,
+        },
+      };
 
-    return { data: rows };
+      if (args.query.from || args.query.to) {
+        const eventsWhere: Prisma.eventsWhereInput = {
+          tenant_id: tenantId,
+          starts_at: {}, // ✅ TypeScript bu yerda DateTimeFilter deb tushunadi
+        };
+
+        if (args.query.from) {
+          // ✅ `as Prisma.DateTimeFilter` cast qilish kerak
+          (eventsWhere.starts_at as Prisma.DateTimeFilter).gte = new Date(
+            args.query.from,
+          );
+        }
+        if (args.query.to) {
+          const toDate = new Date(args.query.to);
+          toDate.setHours(23, 59, 59, 999);
+          (eventsWhere.starts_at as Prisma.DateTimeFilter).lte = toDate;
+        }
+
+        where.events = eventsWhere;
+      }
+
+      const events = await this.prisma.event_participants.findMany({
+        where,
+        orderBy: { events: { starts_at: 'desc' } },
+        include: {
+          events: {
+            include: {
+              campuses: { select: { name: true } },
+            },
+          },
+        },
+        take: 200,
+      });
+
+      return {
+        student: {
+          id: studentId.toString(),
+          fullName: account.students.full_name,
+        },
+        events: events.map((ep) => ({
+          id: ep.events.id.toString(),
+          title: ep.events.title,
+          eventType: ep.events.event_type,
+          startsAt: ep.events.starts_at,
+          endsAt: ep.events.ends_at,
+          campusId: ep.events.campus_id?.toString() || null,
+          campusName: ep.events.campuses?.name || null,
+          description: ep.events.description,
+          role: ep.role,
+        })),
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 }

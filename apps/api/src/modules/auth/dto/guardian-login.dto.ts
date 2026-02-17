@@ -7,6 +7,7 @@ import {
   MinLength,
   IsDefined,
   IsAlphanumeric,
+  IsOptional,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -39,6 +40,7 @@ export class GuardianLoginDto {
     example: 'device-id-123',
     description: 'Optional device identifier for session tracking',
   })
+  @IsOptional()
   @IsString()
   @MaxLength(255)
   deviceId?: string;

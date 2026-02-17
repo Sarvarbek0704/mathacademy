@@ -1,5 +1,5 @@
+// apps/api/src/modules/competitions/competitions.module.ts
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '../../prisma/prisma.module';
 import { CompetitionsService } from './competitions.service';
 import {
   CompetitionsController,
@@ -7,8 +7,8 @@ import {
 } from './competitions.controller';
 
 @Module({
-  imports: [PrismaModule],
   controllers: [CompetitionsController, GuardianCompetitionsController],
   providers: [CompetitionsService],
+  exports: [CompetitionsService],
 })
 export class CompetitionsModule {}

@@ -1,5 +1,12 @@
+// apps/api/src/modules/notifications/dto/list-notifications.query.dto.ts
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import {
+  IsIn,
+  IsOptional,
+  IsString,
+  Matches,
+  IsDateString,
+} from 'class-validator';
 
 export class ListNotificationsQueryDto {
   @ApiPropertyOptional()
@@ -13,10 +20,7 @@ export class ListNotificationsQueryDto {
   @IsIn(['IN_APP', 'TELEGRAM_BOT', 'SMS'])
   channel?: string;
 
-  @ApiPropertyOptional({
-    example: 'QUEUED',
-    enum: ['QUEUED', 'SENT', 'FAILED', 'READ'],
-  })
+  @ApiPropertyOptional({ enum: ['QUEUED', 'SENT', 'FAILED', 'READ'] })
   @IsOptional()
   @IsString()
   @IsIn(['QUEUED', 'SENT', 'FAILED', 'READ'])
@@ -24,21 +28,23 @@ export class ListNotificationsQueryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsDateString()
   from?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsDateString()
   to?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @Matches(/^\d+$/)
   limit?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @Matches(/^\d+$/)
   offset?: string;
 }

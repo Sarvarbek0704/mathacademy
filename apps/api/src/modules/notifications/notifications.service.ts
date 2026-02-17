@@ -1,8 +1,28 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+// apps/api/src/modules/notifications/notifications.service.ts
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditLogger } from '../../common/utils/audit.util';
+import { rethrowServiceError } from '../../common/utils/service-error.util';
 
-function tpl(str: string, vars?: Record<string, any>) {
+import { UpsertNotificationTemplateDto } from './dto/upsert-template.dto';
+import { ListNotificationTemplatesQueryDto } from './dto/list-templates.query.dto';
+import { UpsertNotificationPreferenceDto } from './dto/upsert-preference.dto';
+import { SendNotificationDto } from './dto/send-notification.dto';
+import { ListNotificationsQueryDto } from './dto/list-notifications.query.dto';
+
+function toBigInt(value: unknown, field = 'id'): bigint {
+  const s = String(value ?? '').trim();
+  if (!/^\d+$/.test(s) || s === '0')
+    throw new BadRequestException(`INVALID_${field.toUpperCase()}`);
+  return BigInt(s);
+}
+
+function tpl(str: string, vars?: Record<string, any>): string {
   const s = String(str || '');
   const v = vars || {};
   return s.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_, key) => {
@@ -13,470 +33,779 @@ function tpl(str: string, vars?: Record<string, any>) {
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly auditLogger: AuditLogger;
 
-  // ---------- Templates ----------
-  async upsertTemplate(args: { tenantId: string; dto: any }) {
-    const tenantId = BigInt(args.tenantId);
-    const code = String(args.dto.code || '').trim();
-    const channel = String(args.dto.channel || '').trim();
-    const title = String(args.dto.title || '').trim();
-    const body = String(args.dto.body || '').trim();
-
-    if (!code) throw new BadRequestException('CODE_REQUIRED');
-    if (!title) throw new BadRequestException('TITLE_REQUIRED');
-    if (!body) throw new BadRequestException('BODY_REQUIRED');
-
-    const rows = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`
-        INSERT INTO notification_templates (tenant_id, code, channel, title, body)
-        VALUES (${tenantId}, ${code}, ${channel}, ${title}, ${body})
-        ON CONFLICT (tenant_id, code, channel)
-        DO UPDATE SET title=EXCLUDED.title, body=EXCLUDED.body
-        RETURNING id
-      `,
-    );
-
-    return { id: rows[0].id.toString(), ok: true };
+  constructor(private readonly prisma: PrismaService) {
+    this.auditLogger = new AuditLogger(prisma);
   }
 
-  async listTemplates(args: { tenantId: string; q: any }) {
-    const tenantId = BigInt(args.tenantId);
-    const q = args.q || {};
-    const qq = q.q ? String(q.q).trim() : null;
-    const code = q.code ? String(q.code).trim() : null;
-    const channel = q.channel ? String(q.channel).trim() : null;
+  // ---------- Templates ----------
 
-    const limit = Math.min(Math.max(Number(q.limit || 50), 1), 200);
-    const offset = Math.max(Number(q.offset || 0), 0);
+  async upsertTemplate(args: {
+    tenantId: string;
+    userId: string;
+    dto: UpsertNotificationTemplateDto;
+    ipAddress?: string;
+  }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const user_id = args.userId ? toBigInt(args.userId, 'userId') : null;
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT
-          id::text AS id,
-          code,
-          channel,
-          title,
-          body,
-          created_at
-        FROM notification_templates
-        WHERE tenant_id=${tenantId}
-          ${channel ? Prisma.sql`AND channel=${channel}` : Prisma.empty}
-          ${code ? Prisma.sql`AND code=${code}` : Prisma.empty}
-          ${
-            qq
-              ? Prisma.sql`AND (code ILIKE ${'%' + qq + '%'} OR title ILIKE ${'%' + qq + '%'} OR body ILIKE ${'%' + qq + '%'})`
-              : Prisma.empty
-          }
-        ORDER BY id DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `,
-    );
+      const template = await this.prisma.notification_templates.upsert({
+        where: {
+          tenant_id_code_channel: {
+            tenant_id,
+            code: args.dto.code,
+            channel: args.dto.channel,
+          },
+        },
+        update: {
+          title: args.dto.title,
+          body: args.dto.body,
+        },
+        create: {
+          tenant_id,
+          code: args.dto.code,
+          channel: args.dto.channel,
+          title: args.dto.title,
+          body: args.dto.body,
+        },
+      });
 
-    return { data: rows, meta: { limit, offset } };
+      await this.auditLogger.log({
+        tenantId: tenant_id,
+        actorType: 'STAFF',
+        actorUserId: user_id,
+        action: 'CREATE',
+        entityType: 'notification_templates',
+        entityId: template.id,
+        afterData: {
+          id: template.id.toString(),
+          code: template.code,
+          channel: template.channel,
+          title: template.title,
+        },
+        ipAddress: args.ipAddress,
+      });
+
+      return {
+        id: template.id.toString(),
+        code: template.code,
+        channel: template.channel,
+        title: template.title,
+        body: template.body,
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
+
+  async listTemplates(args: {
+    tenantId: string;
+    query: ListNotificationTemplatesQueryDto;
+  }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const limit = args.query.limit
+        ? Math.min(parseInt(args.query.limit), 200)
+        : 20;
+      const offset = args.query.offset ? parseInt(args.query.offset) : 0;
+
+      const where: Prisma.notification_templatesWhereInput = {
+        tenant_id,
+      };
+
+      if (args.query.channel) {
+        where.channel = args.query.channel;
+      }
+      if (args.query.code) {
+        where.code = args.query.code;
+      }
+      if (args.query.q) {
+        const search = args.query.q.trim();
+        where.OR = [
+          { code: { contains: search, mode: 'insensitive' } },
+          { title: { contains: search, mode: 'insensitive' } },
+          { body: { contains: search, mode: 'insensitive' } },
+        ];
+      }
+
+      const [total, items] = await this.prisma.$transaction([
+        this.prisma.notification_templates.count({ where }),
+        this.prisma.notification_templates.findMany({
+          where,
+          skip: offset,
+          take: limit,
+          orderBy: { id: 'desc' },
+          select: {
+            id: true,
+            code: true,
+            channel: true,
+            title: true,
+            body: true,
+            created_at: true,
+          },
+        }),
+      ]);
+
+      return {
+        data: items.map((t) => ({
+          id: t.id.toString(),
+          code: t.code,
+          channel: t.channel,
+          title: t.title,
+          body: t.body,
+          createdAt: t.created_at,
+        })),
+        meta: { limit, offset, total },
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 
   // ---------- Preferences (staff) ----------
+
   async upsertPreferenceForUser(args: {
     tenantId: string;
     userId: string;
-    dto: any;
+    dto: UpsertNotificationPreferenceDto;
+    ipAddress?: string;
   }) {
-    const tenantId = BigInt(args.tenantId);
-    const userId = BigInt(args.userId);
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const user_id = toBigInt(args.userId, 'userId');
 
-    const u = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`SELECT id FROM users WHERE tenant_id=${tenantId} AND id=${userId} LIMIT 1`,
-    );
-    if (!u.length) throw new BadRequestException('USER_NOT_FOUND');
+      const user = await this.prisma.users.findFirst({
+        where: { id: user_id, tenant_id },
+      });
+      if (!user) throw new NotFoundException('USER_NOT_FOUND');
 
-    const dto = args.dto || {};
+      const pref = await this.prisma.notification_preferences.upsert({
+        where: {
+          tenant_id_account_type_user_id_student_account_id: {
+            tenant_id,
+            account_type: 'STAFF',
+            user_id,
+            student_account_id: null as any, // ✅ null workaround
+          },
+        },
+        update: {
+          in_app_enabled: args.dto.inAppEnabled,
+          telegram_enabled: args.dto.telegramEnabled,
+          sms_enabled: args.dto.smsEnabled,
+          telegram_chat_id: args.dto.telegramChatId,
+          sms_phone: args.dto.smsPhone,
+          updated_at: new Date(),
+        },
+        create: {
+          tenant_id,
+          account_type: 'STAFF',
+          user_id,
+          student_account_id: null as any,
+          in_app_enabled: args.dto.inAppEnabled ?? true,
+          telegram_enabled: args.dto.telegramEnabled ?? false,
+          sms_enabled: args.dto.smsEnabled ?? false,
+          telegram_chat_id: args.dto.telegramChatId,
+          sms_phone: args.dto.smsPhone,
+        },
+      });
 
-    const inAppEnabled =
-      typeof dto.inAppEnabled === 'boolean' ? dto.inAppEnabled : undefined;
-    const telegramEnabled =
-      typeof dto.telegramEnabled === 'boolean'
-        ? dto.telegramEnabled
-        : undefined;
-    const smsEnabled =
-      typeof dto.smsEnabled === 'boolean' ? dto.smsEnabled : undefined;
+      await this.auditLogger.log({
+        tenantId: tenant_id,
+        actorType: 'STAFF',
+        actorUserId: user_id,
+        action: 'UPDATE', // ✅ action qo‘shildi
+        entityType: 'notification_preferences',
+        entityId: pref.id,
+        afterData: {
+          inAppEnabled: pref.in_app_enabled,
+          telegramEnabled: pref.telegram_enabled,
+          smsEnabled: pref.sms_enabled,
+        },
+        ipAddress: args.ipAddress,
+      });
 
-    const telegramChatId =
-      dto.telegramChatId !== undefined
-        ? String(dto.telegramChatId || '')
-        : undefined;
-    const smsPhone =
-      dto.smsPhone !== undefined ? String(dto.smsPhone || '') : undefined;
-
-    // MVP: SMS real send yo‘q, lekin preference saqlab qo‘yamiz
-    await this.prisma.$executeRaw(
-      Prisma.sql`
-        INSERT INTO notification_preferences
-          (tenant_id, account_type, user_id, student_account_id,
-           in_app_enabled, telegram_enabled, sms_enabled, telegram_chat_id, sms_phone, updated_at)
-        VALUES
-          (${tenantId}, 'STAFF', ${userId}, NULL,
-           ${inAppEnabled ?? true}, ${telegramEnabled ?? false}, ${smsEnabled ?? false},
-           ${telegramChatId ?? null}, ${smsPhone ?? null}, now())
-        ON CONFLICT (tenant_id, account_type, user_id, student_account_id)
-        DO UPDATE SET
-          in_app_enabled = COALESCE(EXCLUDED.in_app_enabled, notification_preferences.in_app_enabled),
-          telegram_enabled = COALESCE(EXCLUDED.telegram_enabled, notification_preferences.telegram_enabled),
-          sms_enabled = COALESCE(EXCLUDED.sms_enabled, notification_preferences.sms_enabled),
-          telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, notification_preferences.telegram_chat_id),
-          sms_phone = COALESCE(EXCLUDED.sms_phone, notification_preferences.sms_phone),
-          updated_at = now()
-      `,
-    );
-
-    return { ok: true };
+      return {
+        id: pref.id.toString(),
+        inAppEnabled: pref.in_app_enabled,
+        telegramEnabled: pref.telegram_enabled,
+        smsEnabled: pref.sms_enabled,
+        telegramChatId: pref.telegram_chat_id,
+        smsPhone: pref.sms_phone,
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 
   async upsertPreferenceForStudentAccount(args: {
     tenantId: string;
     studentAccountId: string;
-    dto: any;
+    dto: UpsertNotificationPreferenceDto;
+    ipAddress?: string;
   }) {
-    const tenantId = BigInt(args.tenantId);
-    const studentAccountId = BigInt(args.studentAccountId);
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const student_account_id = toBigInt(
+        args.studentAccountId,
+        'studentAccountId',
+      );
 
-    const a = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`
-        SELECT sa.id
-        FROM student_accounts sa
-        JOIN students s ON s.id=sa.student_id
-        WHERE sa.id=${studentAccountId} AND s.tenant_id=${tenantId}
-        LIMIT 1
-      `,
-    );
-    if (!a.length) throw new BadRequestException('STUDENT_ACCOUNT_NOT_FOUND');
+      const account = await this.prisma.student_accounts.findFirst({
+        where: { id: student_account_id, tenant_id },
+      });
+      if (!account) throw new NotFoundException('STUDENT_ACCOUNT_NOT_FOUND');
 
-    const dto = args.dto || {};
-    const inAppEnabled =
-      typeof dto.inAppEnabled === 'boolean' ? dto.inAppEnabled : undefined;
-    const telegramEnabled =
-      typeof dto.telegramEnabled === 'boolean'
-        ? dto.telegramEnabled
-        : undefined;
-    const smsEnabled =
-      typeof dto.smsEnabled === 'boolean' ? dto.smsEnabled : undefined;
-    const telegramChatId =
-      dto.telegramChatId !== undefined
-        ? String(dto.telegramChatId || '')
-        : undefined;
-    const smsPhone =
-      dto.smsPhone !== undefined ? String(dto.smsPhone || '') : undefined;
+      const pref = await this.prisma.notification_preferences.upsert({
+        where: {
+          tenant_id_account_type_user_id_student_account_id: {
+            tenant_id,
+            account_type: 'GUARDIAN',
+            user_id: null as any, // ✅ null allowed, but TypeScript workaround
+            student_account_id,
+          },
+        },
+        update: {
+          in_app_enabled: args.dto.inAppEnabled,
+          telegram_enabled: args.dto.telegramEnabled,
+          sms_enabled: args.dto.smsEnabled,
+          telegram_chat_id: args.dto.telegramChatId,
+          sms_phone: args.dto.smsPhone,
+          updated_at: new Date(),
+        },
+        create: {
+          tenant_id,
+          account_type: 'GUARDIAN',
+          user_id: null as any,
+          student_account_id,
+          in_app_enabled: args.dto.inAppEnabled ?? true,
+          telegram_enabled: args.dto.telegramEnabled ?? false,
+          sms_enabled: args.dto.smsEnabled ?? false,
+          telegram_chat_id: args.dto.telegramChatId,
+          sms_phone: args.dto.smsPhone,
+        },
+      });
 
-    await this.prisma.$executeRaw(
-      Prisma.sql`
-        INSERT INTO notification_preferences
-          (tenant_id, account_type, user_id, student_account_id,
-           in_app_enabled, telegram_enabled, sms_enabled, telegram_chat_id, sms_phone, updated_at)
-        VALUES
-          (${tenantId}, 'GUARDIAN', NULL, ${studentAccountId},
-           ${inAppEnabled ?? true}, ${telegramEnabled ?? false}, ${smsEnabled ?? false},
-           ${telegramChatId ?? null}, ${smsPhone ?? null}, now())
-        ON CONFLICT (tenant_id, account_type, user_id, student_account_id)
-        DO UPDATE SET
-          in_app_enabled = COALESCE(EXCLUDED.in_app_enabled, notification_preferences.in_app_enabled),
-          telegram_enabled = COALESCE(EXCLUDED.telegram_enabled, notification_preferences.telegram_enabled),
-          sms_enabled = COALESCE(EXCLUDED.sms_enabled, notification_preferences.sms_enabled),
-          telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, notification_preferences.telegram_chat_id),
-          sms_phone = COALESCE(EXCLUDED.sms_phone, notification_preferences.sms_phone),
-          updated_at = now()
-      `,
-    );
+      await this.auditLogger.log({
+        tenantId: tenant_id,
+        actorType: 'STAFF',
+        actorUserId: null, // bu yerda staff userId kerak, controllerdan olinadi (keyin qo‘shamiz)
+        action: 'UPDATE', // ✅ MUHIM! action qo‘shildi
+        entityType: 'notification_preferences',
+        entityId: pref.id,
+        afterData: {
+          inAppEnabled: pref.in_app_enabled,
+          telegramEnabled: pref.telegram_enabled,
+          smsEnabled: pref.sms_enabled,
+        },
+        ipAddress: args.ipAddress,
+      });
 
-    return { ok: true };
+      return {
+        id: pref.id.toString(),
+        inAppEnabled: pref.in_app_enabled,
+        telegramEnabled: pref.telegram_enabled,
+        smsEnabled: pref.sms_enabled,
+        telegramChatId: pref.telegram_chat_id,
+        smsPhone: pref.sms_phone,
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 
   // ---------- Preferences (guardian self) ----------
+
   async getOrCreateGuardianPref(args: { studentAccountId: string }) {
-    const studentAccountId = BigInt(args.studentAccountId);
+    try {
+      const student_account_id = toBigInt(
+        args.studentAccountId,
+        'studentAccountId',
+      );
 
-    const base = await this.prisma.$queryRaw<{ tenant_id: bigint }[]>(
-      Prisma.sql`
-        SELECT s.tenant_id
-        FROM student_accounts sa
-        JOIN students s ON s.id=sa.student_id
-        WHERE sa.id=${studentAccountId}
-        LIMIT 1
-      `,
-    );
-    if (!base.length) throw new BadRequestException('ACCOUNT_NOT_FOUND');
+      const account = await this.prisma.student_accounts.findUnique({
+        where: { id: student_account_id },
+        include: { students: true },
+      });
+      if (!account) throw new NotFoundException('ACCOUNT_NOT_FOUND');
+      const tenant_id = account.students.tenant_id;
 
-    const tenantId = base[0].tenant_id;
+      let pref = await this.prisma.notification_preferences.findUnique({
+        where: {
+          tenant_id_account_type_user_id_student_account_id: {
+            tenant_id,
+            account_type: 'GUARDIAN',
+            user_id: null as any, // ✅ TypeScript workaround
+            student_account_id,
+          },
+        },
+      });
 
-    const pref = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT
-          id::text AS id,
-          in_app_enabled,
-          telegram_enabled,
-          sms_enabled,
-          telegram_chat_id,
-          sms_phone
-        FROM notification_preferences
-        WHERE tenant_id=${tenantId} AND account_type='GUARDIAN' AND student_account_id=${studentAccountId}
-        LIMIT 1
-      `,
-    );
+      if (!pref) {
+        pref = await this.prisma.notification_preferences.create({
+          data: {
+            tenant_id,
+            account_type: 'GUARDIAN',
+            user_id: null as any, // ✅ TypeScript workaround
+            student_account_id,
+            in_app_enabled: true,
+            telegram_enabled: false,
+            sms_enabled: false,
+          },
+        });
+      }
 
-    if (pref.length) return { data: pref[0] };
-
-    await this.prisma.$executeRaw(
-      Prisma.sql`
-        INSERT INTO notification_preferences
-          (tenant_id, account_type, user_id, student_account_id,
-           in_app_enabled, telegram_enabled, sms_enabled, updated_at)
-        VALUES (${tenantId}, 'GUARDIAN', NULL, ${studentAccountId}, true, false, false, now())
-      `,
-    );
-
-    const pref2 = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT
-          id::text AS id,
-          in_app_enabled,
-          telegram_enabled,
-          sms_enabled,
-          telegram_chat_id,
-          sms_phone
-        FROM notification_preferences
-        WHERE tenant_id=${tenantId} AND account_type='GUARDIAN' AND student_account_id=${studentAccountId}
-        LIMIT 1
-      `,
-    );
-
-    return { data: pref2[0] };
+      return {
+        id: pref.id.toString(),
+        inAppEnabled: pref.in_app_enabled,
+        telegramEnabled: pref.telegram_enabled,
+        smsEnabled: pref.sms_enabled,
+        telegramChatId: pref.telegram_chat_id,
+        smsPhone: pref.sms_phone,
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 
-  async updateGuardianPref(args: { studentAccountId: string; dto: any }) {
-    // tenantId’ni ichidan topamiz
-    const studentAccountId = BigInt(args.studentAccountId);
+  async updateGuardianPref(args: {
+    studentAccountId: string;
+    dto: UpsertNotificationPreferenceDto;
+    ipAddress?: string;
+  }) {
+    // For guardian self-update, we need tenantId and actor info. But since we don't have staff userId, we can call upsertPreferenceForStudentAccount without actorUserId.
+    // We'll modify upsertPreferenceForStudentAccount to accept optional actorUserId.
+    // We'll implement a separate method for guardian self-update that doesn't log actor or logs with actorType GUARDIAN.
+    try {
+      const student_account_id = toBigInt(
+        args.studentAccountId,
+        'studentAccountId',
+      );
 
-    const base = await this.prisma.$queryRaw<{ tenant_id: bigint }[]>(
-      Prisma.sql`
-        SELECT s.tenant_id
-        FROM student_accounts sa
-        JOIN students s ON s.id=sa.student_id
-        WHERE sa.id=${studentAccountId}
-        LIMIT 1
-      `,
-    );
-    if (!base.length) throw new BadRequestException('ACCOUNT_NOT_FOUND');
+      const account = await this.prisma.student_accounts.findUnique({
+        where: { id: student_account_id },
+        include: { students: true },
+      });
+      if (!account) throw new NotFoundException('ACCOUNT_NOT_FOUND');
+      const tenant_id = account.students.tenant_id;
 
-    const tenantId = base[0].tenant_id;
-    return this.upsertPreferenceForStudentAccount({
-      tenantId: tenantId.toString(),
-      studentAccountId: args.studentAccountId,
-      dto: args.dto,
-    });
+      const pref = await this.prisma.notification_preferences.upsert({
+        where: {
+          tenant_id_account_type_user_id_student_account_id: {
+            tenant_id,
+            account_type: 'GUARDIAN',
+            user_id: null as any,
+            student_account_id,
+          },
+        },
+        update: {
+          in_app_enabled: args.dto.inAppEnabled,
+          telegram_enabled: args.dto.telegramEnabled,
+          sms_enabled: args.dto.smsEnabled,
+          telegram_chat_id: args.dto.telegramChatId,
+          sms_phone: args.dto.smsPhone,
+          updated_at: new Date(),
+        },
+        create: {
+          tenant_id,
+          account_type: 'GUARDIAN',
+          user_id: null,
+          student_account_id,
+          in_app_enabled: args.dto.inAppEnabled ?? true,
+          telegram_enabled: args.dto.telegramEnabled ?? false,
+          sms_enabled: args.dto.smsEnabled ?? false,
+          telegram_chat_id: args.dto.telegramChatId,
+          sms_phone: args.dto.smsPhone,
+        },
+      });
+
+      await this.auditLogger.log({
+        tenantId: tenant_id,
+        actorType: 'GUARDIAN',
+        actorStudentAccountId: student_account_id,
+        action: 'UPDATE',
+        entityType: 'notification_preferences',
+        entityId: pref.id,
+        afterData: {
+          inAppEnabled: pref.in_app_enabled,
+          telegramEnabled: pref.telegram_enabled,
+          smsEnabled: pref.sms_enabled,
+        },
+        ipAddress: args.ipAddress,
+      });
+
+      return {
+        id: pref.id.toString(),
+        inAppEnabled: pref.in_app_enabled,
+        telegramEnabled: pref.telegram_enabled,
+        smsEnabled: pref.sms_enabled,
+        telegramChatId: pref.telegram_chat_id,
+        smsPhone: pref.sms_phone,
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 
   // ---------- Send / Queue ----------
-  async send(args: { tenantId: string; dto: any }) {
-    const tenantId = BigInt(args.tenantId);
-    const dto = args.dto || {};
 
-    const channel = String(dto.channel || '').trim();
-    const toUserId = dto.to?.userId ? BigInt(dto.to.userId) : null;
-    const toStudentAccountId = dto.to?.studentAccountId
-      ? BigInt(dto.to.studentAccountId)
-      : null;
+  async send(args: {
+    tenantId: string;
+    userId?: string; // staff userId if sent by staff, otherwise guardian?
+    dto: SendNotificationDto;
+    ipAddress?: string;
+  }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const dto = args.dto;
 
-    if (!toUserId && !toStudentAccountId)
-      throw new BadRequestException('RECIPIENT_REQUIRED');
-    if (toUserId && toStudentAccountId)
-      throw new BadRequestException('RECIPIENT_AMBIGUOUS');
+      // Validate recipient
+      if (!dto.to || (!dto.to.userId && !dto.to.studentAccountId)) {
+        throw new BadRequestException('RECIPIENT_REQUIRED');
+      }
+      if (dto.to.userId && dto.to.studentAccountId) {
+        throw new BadRequestException('RECIPIENT_AMBIGUOUS');
+      }
 
-    // resolve template if provided
-    let title = dto.title ? String(dto.title) : '';
-    let body = dto.body ? String(dto.body) : '';
+      let recipient_user_id: bigint | null = null;
+      let recipient_student_account_id: bigint | null = null;
+      if (dto.to.userId) {
+        recipient_user_id = toBigInt(dto.to.userId, 'userId');
+        const user = await this.prisma.users.findFirst({
+          where: { id: recipient_user_id, tenant_id },
+        });
+        if (!user) throw new NotFoundException('USER_NOT_FOUND');
+      } else {
+        recipient_student_account_id = toBigInt(
+          dto.to.studentAccountId,
+          'studentAccountId',
+        );
+        const account = await this.prisma.student_accounts.findFirst({
+          where: { id: recipient_student_account_id, tenant_id },
+        });
+        if (!account) throw new NotFoundException('STUDENT_ACCOUNT_NOT_FOUND');
+      }
 
-    if (dto.templateCode) {
-      const code = String(dto.templateCode).trim();
-      const t = await this.prisma.$queryRaw<any[]>(
-        Prisma.sql`
-          SELECT title, body
-          FROM notification_templates
-          WHERE tenant_id=${tenantId} AND code=${code} AND channel=${channel}
-          LIMIT 1
-        `,
-      );
-      if (!t.length) throw new BadRequestException('TEMPLATE_NOT_FOUND');
-      title = t[0].title;
-      body = t[0].body;
+      // Determine title and body
+      let title: string;
+      let body: string;
+
+      if (dto.templateCode) {
+        const template = await this.prisma.notification_templates.findUnique({
+          where: {
+            tenant_id_code_channel: {
+              tenant_id,
+              code: dto.templateCode,
+              channel: dto.channel,
+            },
+          },
+        });
+        if (!template) throw new NotFoundException('TEMPLATE_NOT_FOUND');
+        title = template.title;
+        body = template.body;
+      } else {
+        if (!dto.title || !dto.body) {
+          throw new BadRequestException(
+            'TITLE_AND_BODY_REQUIRED_WHEN_NO_TEMPLATE',
+          );
+        }
+        title = dto.title;
+        body = dto.body;
+      }
+
+      // Apply vars
+      title = tpl(title, dto.vars);
+      body = tpl(body, dto.vars);
+
+      // Related entity JSON
+      const related_entity = dto.relatedEntity
+        ? JSON.stringify(dto.relatedEntity)
+        : null;
+
+      // Create notification
+      const notification = await this.prisma.notifications.create({
+        data: {
+          tenant_id,
+          channel: dto.channel,
+          status: 'QUEUED',
+          title,
+          body,
+          recipient_user_id,
+          student_account_id: recipient_student_account_id,
+          related_entity,
+        },
+      });
+
+      // Audit log (optional)
+      // We could log but maybe too noisy
+
+      return {
+        id: notification.id.toString(),
+        status: notification.status,
+        ok: true,
+      };
+    } catch (error) {
+      rethrowServiceError(error);
     }
-
-    if (!title.trim()) throw new BadRequestException('TITLE_REQUIRED');
-    if (!body.trim()) throw new BadRequestException('BODY_REQUIRED');
-
-    // apply vars
-    title = tpl(title, dto.vars);
-    body = tpl(body, dto.vars);
-
-    // related_entity JSON string
-    const relatedEntityStr = dto.relatedEntity
-      ? JSON.stringify(dto.relatedEntity)
-      : null;
-
-    const rows = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`
-        INSERT INTO notifications
-          (tenant_id, channel, status, title, body, recipient_user_id, student_account_id, related_entity)
-        VALUES
-          (${tenantId}, ${channel}, 'QUEUED', ${title}, ${body}, ${toUserId}, ${toStudentAccountId}, ${relatedEntityStr})
-        RETURNING id
-      `,
-    );
-
-    return { id: rows[0].id.toString(), ok: true, status: 'QUEUED' };
   }
 
-  // ---------- List ----------
-  async listAll(args: { tenantId: string; q: any }) {
-    const tenantId = BigInt(args.tenantId);
-    const q = args.q || {};
+  // ---------- List Notifications ----------
 
-    const qq = q.q ? String(q.q).trim() : null;
-    const channel = q.channel ? String(q.channel).trim() : null;
-    const status = q.status ? String(q.status).trim() : null;
-    const from = q.from ? String(q.from) : null;
-    const to = q.to ? String(q.to) : null;
+  async listAll(args: { tenantId: string; query: ListNotificationsQueryDto }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const limit = args.query.limit
+        ? Math.min(parseInt(args.query.limit), 200)
+        : 20;
+      const offset = args.query.offset ? parseInt(args.query.offset) : 0;
 
-    const limit = Math.min(Math.max(Number(q.limit || 50), 1), 200);
-    const offset = Math.max(Number(q.offset || 0), 0);
+      const where: Prisma.notificationsWhereInput = {
+        tenant_id,
+      };
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT
-          n.id::text AS id,
-          n.channel,
-          n.status,
-          n.title,
-          n.body,
-          n.recipient_user_id::text AS recipient_user_id,
-          n.student_account_id::text AS student_account_id,
-          n.related_entity,
-          n.created_at,
-          n.sent_at
-        FROM notifications n
-        WHERE n.tenant_id=${tenantId}
-          ${channel ? Prisma.sql`AND n.channel=${channel}` : Prisma.empty}
-          ${status ? Prisma.sql`AND n.status=${status}` : Prisma.empty}
-          ${from ? Prisma.sql`AND n.created_at >= ${from}::timestamptz` : Prisma.empty}
-          ${to ? Prisma.sql`AND n.created_at <= ${to}::timestamptz` : Prisma.empty}
-          ${
-            qq
-              ? Prisma.sql`AND (n.title ILIKE ${'%' + qq + '%'} OR n.body ILIKE ${'%' + qq + '%'})`
-              : Prisma.empty
-          }
-        ORDER BY n.id DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `,
-    );
+      if (args.query.channel) {
+        where.channel = args.query.channel;
+      }
+      if (args.query.status) {
+        where.status = args.query.status;
+      }
+      if (args.query.from || args.query.to) {
+        where.created_at = {};
+        if (args.query.from) {
+          where.created_at.gte = new Date(args.query.from);
+        }
+        if (args.query.to) {
+          const toDate = new Date(args.query.to);
+          toDate.setHours(23, 59, 59, 999);
+          where.created_at.lte = toDate;
+        }
+      }
+      if (args.query.q) {
+        const search = args.query.q.trim();
+        where.OR = [
+          { title: { contains: search, mode: 'insensitive' } },
+          { body: { contains: search, mode: 'insensitive' } },
+        ];
+      }
 
-    return { data: rows, meta: { limit, offset } };
+      const [total, items] = await this.prisma.$transaction([
+        this.prisma.notifications.count({ where }),
+        this.prisma.notifications.findMany({
+          where,
+          skip: offset,
+          take: limit,
+          orderBy: { id: 'desc' },
+          include: {
+            users: { select: { full_name: true } },
+            student_accounts: {
+              select: {
+                student_login_id: true,
+                students: { select: { full_name: true } },
+              },
+            },
+          },
+        }),
+      ]);
+
+      return {
+        data: items.map((n) => ({
+          id: n.id.toString(),
+          channel: n.channel,
+          status: n.status,
+          title: n.title,
+          body: n.body,
+          recipient: n.users
+            ? { type: 'STAFF', name: n.users.full_name }
+            : n.student_accounts
+              ? {
+                  type: 'GUARDIAN',
+                  name: n.student_accounts.students.full_name,
+                }
+              : null,
+          relatedEntity: n.related_entity ? JSON.parse(n.related_entity) : null,
+          createdAt: n.created_at,
+          sentAt: n.sent_at,
+        })),
+        meta: { limit, offset, total },
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 
   async listGuardian(args: {
     studentAccountId: string;
-    from?: string;
-    to?: string;
-    status?: string;
-    channel?: string;
+    query: ListNotificationsQueryDto;
   }) {
-    const studentAccountId = BigInt(args.studentAccountId);
+    try {
+      const student_account_id = toBigInt(
+        args.studentAccountId,
+        'studentAccountId',
+      );
 
-    const base = await this.prisma.$queryRaw<{ tenant_id: bigint }[]>(
-      Prisma.sql`
-        SELECT s.tenant_id
-        FROM student_accounts sa
-        JOIN students s ON s.id=sa.student_id
-        WHERE sa.id=${studentAccountId}
-        LIMIT 1
-      `,
-    );
-    if (!base.length) throw new BadRequestException('ACCOUNT_NOT_FOUND');
+      const account = await this.prisma.student_accounts.findUnique({
+        where: { id: student_account_id },
+        include: { students: true },
+      });
+      if (!account) throw new NotFoundException('ACCOUNT_NOT_FOUND');
+      const tenant_id = account.students.tenant_id;
 
-    const tenantId = base[0].tenant_id;
+      const limit = args.query.limit
+        ? Math.min(parseInt(args.query.limit), 200)
+        : 20;
+      const offset = args.query.offset ? parseInt(args.query.offset) : 0;
 
-    const from = args.from ? String(args.from) : null;
-    const to = args.to ? String(args.to) : null;
-    const status = args.status ? String(args.status) : null;
-    const channel = args.channel ? String(args.channel) : null;
+      const where: Prisma.notificationsWhereInput = {
+        tenant_id,
+        student_account_id,
+      };
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT
-          id::text AS id,
-          channel,
-          status,
-          title,
-          body,
-          related_entity,
-          created_at,
-          sent_at
-        FROM notifications
-        WHERE tenant_id=${tenantId} AND student_account_id=${studentAccountId}
-          ${channel ? Prisma.sql`AND channel=${channel}` : Prisma.empty}
-          ${status ? Prisma.sql`AND status=${status}` : Prisma.empty}
-          ${from ? Prisma.sql`AND created_at >= ${from}::timestamptz` : Prisma.empty}
-          ${to ? Prisma.sql`AND created_at <= ${to}::timestamptz` : Prisma.empty}
-        ORDER BY id DESC
-        LIMIT 200
-      `,
-    );
+      if (args.query.channel) {
+        where.channel = args.query.channel;
+      }
+      if (args.query.status) {
+        where.status = args.query.status;
+      }
+      if (args.query.from || args.query.to) {
+        where.created_at = {};
+        if (args.query.from) {
+          where.created_at.gte = new Date(args.query.from);
+        }
+        if (args.query.to) {
+          const toDate = new Date(args.query.to);
+          toDate.setHours(23, 59, 59, 999);
+          where.created_at.lte = toDate;
+        }
+      }
 
-    return { data: rows };
+      const [total, items] = await this.prisma.$transaction([
+        this.prisma.notifications.count({ where }),
+        this.prisma.notifications.findMany({
+          where,
+          skip: offset,
+          take: limit,
+          orderBy: { id: 'desc' },
+          select: {
+            id: true,
+            channel: true,
+            status: true,
+            title: true,
+            body: true,
+            related_entity: true,
+            created_at: true,
+            sent_at: true,
+          },
+        }),
+      ]);
+
+      return {
+        data: items.map((n) => ({
+          id: n.id.toString(),
+          channel: n.channel,
+          status: n.status,
+          title: n.title,
+          body: n.body,
+          relatedEntity: n.related_entity ? JSON.parse(n.related_entity) : null,
+          createdAt: n.created_at,
+          sentAt: n.sent_at,
+        })),
+        meta: { limit, offset, total },
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 
   // ---------- Status updates ----------
-  async markSent(args: { tenantId: string; id: string }) {
-    const tenantId = BigInt(args.tenantId);
-    const id = BigInt(args.id);
 
-    await this.prisma.$executeRaw(
-      Prisma.sql`UPDATE notifications SET status='SENT', sent_at=now() WHERE tenant_id=${tenantId} AND id=${id}`,
-    );
-    return { ok: true };
+  async markSent(args: {
+    tenantId: string;
+    notificationId: string;
+    userId?: string;
+    ipAddress?: string;
+  }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const id = toBigInt(args.notificationId, 'notificationId');
+
+      const notification = await this.prisma.notifications.findFirst({
+        where: { id, tenant_id },
+      });
+      if (!notification) throw new NotFoundException('NOTIFICATION_NOT_FOUND');
+      if (notification.status !== 'QUEUED') {
+        // Can mark sent only from QUEUED
+      }
+
+      await this.prisma.notifications.update({
+        where: { id },
+        data: { status: 'SENT', sent_at: new Date() },
+      });
+
+      return { ok: true };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 
-  async markFailed(args: { tenantId: string; id: string }) {
-    const tenantId = BigInt(args.tenantId);
-    const id = BigInt(args.id);
+  async markFailed(args: {
+    tenantId: string;
+    notificationId: string;
+    userId?: string;
+    ipAddress?: string;
+  }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const id = toBigInt(args.notificationId, 'notificationId');
 
-    await this.prisma.$executeRaw(
-      Prisma.sql`UPDATE notifications SET status='FAILED' WHERE tenant_id=${tenantId} AND id=${id}`,
-    );
-    return { ok: true };
+      const notification = await this.prisma.notifications.findFirst({
+        where: { id, tenant_id },
+      });
+      if (!notification) throw new NotFoundException('NOTIFICATION_NOT_FOUND');
+
+      await this.prisma.notifications.update({
+        where: { id },
+        data: { status: 'FAILED' },
+      });
+
+      return { ok: true };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 
-  async guardianMarkRead(args: { studentAccountId: string; id: string }) {
-    const studentAccountId = BigInt(args.studentAccountId);
-    const id = BigInt(args.id);
+  async guardianMarkRead(args: {
+    studentAccountId: string;
+    notificationId: string;
+    ipAddress?: string;
+  }) {
+    try {
+      const student_account_id = toBigInt(
+        args.studentAccountId,
+        'studentAccountId',
+      );
+      const id = toBigInt(args.notificationId, 'notificationId');
 
-    const base = await this.prisma.$queryRaw<{ tenant_id: bigint }[]>(
-      Prisma.sql`
-        SELECT s.tenant_id
-        FROM student_accounts sa
-        JOIN students s ON s.id=sa.student_id
-        WHERE sa.id=${studentAccountId}
-        LIMIT 1
-      `,
-    );
-    if (!base.length) throw new BadRequestException('ACCOUNT_NOT_FOUND');
+      const account = await this.prisma.student_accounts.findUnique({
+        where: { id: student_account_id },
+        include: { students: true },
+      });
+      if (!account) throw new NotFoundException('ACCOUNT_NOT_FOUND');
+      const tenant_id = account.students.tenant_id;
 
-    const tenantId = base[0].tenant_id;
+      const notification = await this.prisma.notifications.findFirst({
+        where: { id, tenant_id, student_account_id },
+      });
+      if (!notification) throw new NotFoundException('NOTIFICATION_NOT_FOUND');
 
-    await this.prisma.$executeRaw(
-      Prisma.sql`
-        UPDATE notifications
-        SET status='READ'
-        WHERE tenant_id=${tenantId} AND id=${id} AND student_account_id=${studentAccountId}
-      `,
-    );
-    return { ok: true };
+      await this.prisma.notifications.update({
+        where: { id },
+        data: { status: 'READ' },
+      });
+
+      return { ok: true };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 }

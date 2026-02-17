@@ -1,3 +1,4 @@
+// apps/api/src/modules/notifications/notifications.controller.ts
 import {
   Body,
   Controller,
@@ -10,10 +11,20 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiQuery,
+} from '@nestjs/swagger';
+
 import { AccessGuard } from '../../common/guards/access.guard';
 import { PermissionsGuard } from '../../common/guards/perms.guard';
 import { RequirePermissions } from '../../common/decorators/perms.decorator';
+import { ParseBigIntPipe } from '../../common/pipes/parse-bigint.pipe';
+
 import { NotificationsService } from './notifications.service';
 import { UpsertNotificationTemplateDto } from './dto/upsert-template.dto';
 import { ListNotificationTemplatesQueryDto } from './dto/list-templates.query.dto';
@@ -28,87 +39,128 @@ import { ListNotificationsQueryDto } from './dto/list-notifications.query.dto';
 export class StaffNotificationsController {
   constructor(private readonly svc: NotificationsService) {}
 
+  private tenantId(req: any): string {
+    return String(req.user?.tenantId || '');
+  }
+
+  private userId(req: any): string {
+    return String(req.user?.userId || '');
+  }
+
+  private ip(req: any): string | undefined {
+    const xf = String(req.headers?.['x-forwarded-for'] || '')
+      .split(',')[0]
+      ?.trim();
+    return xf || req.ip || req.connection?.remoteAddress || undefined;
+  }
+
   // Templates
-  @RequirePermissions('notifications.write')
   @Post('templates')
+  @RequirePermissions('notifications.write')
+  @ApiOperation({ summary: 'Create or update a notification template' })
   upsertTemplate(@Req() req: any, @Body() dto: UpsertNotificationTemplateDto) {
     return this.svc.upsertTemplate({
-      tenantId: String(req.user?.tenantId || ''),
+      tenantId: this.tenantId(req),
+      userId: this.userId(req),
       dto,
+      ipAddress: this.ip(req),
     });
   }
 
-  @RequirePermissions('notifications.read')
   @Get('templates')
+  @RequirePermissions('notifications.read')
+  @ApiOperation({ summary: 'List notification templates' })
   listTemplates(
     @Req() req: any,
-    @Query() q: ListNotificationTemplatesQueryDto,
+    @Query() query: ListNotificationTemplatesQueryDto,
   ) {
     return this.svc.listTemplates({
-      tenantId: String(req.user?.tenantId || ''),
-      q,
+      tenantId: this.tenantId(req),
+      query,
     });
   }
 
   // Preferences (staff can set for any staff user / guardian account)
-  @RequirePermissions('notifications.write')
   @Post('preferences/user/:userId')
+  @RequirePermissions('notifications.write')
+  @ApiOperation({ summary: 'Upsert notification preferences for a staff user' })
   upsertPrefForUser(
     @Req() req: any,
-    @Param('userId') userId: string,
+    @Param('userId', ParseBigIntPipe) userId: bigint,
     @Body() dto: UpsertNotificationPreferenceDto,
   ) {
     return this.svc.upsertPreferenceForUser({
-      tenantId: String(req.user?.tenantId || ''),
-      userId,
+      tenantId: this.tenantId(req),
+      userId: userId.toString(),
       dto,
+      ipAddress: this.ip(req),
     });
   }
 
-  @RequirePermissions('notifications.write')
   @Post('preferences/student-account/:studentAccountId')
+  @RequirePermissions('notifications.write')
+  @ApiOperation({
+    summary: 'Upsert notification preferences for a guardian account',
+  })
   upsertPrefForStudentAccount(
     @Req() req: any,
-    @Param('studentAccountId') studentAccountId: string,
+    @Param('studentAccountId', ParseBigIntPipe) studentAccountId: bigint,
     @Body() dto: UpsertNotificationPreferenceDto,
   ) {
     return this.svc.upsertPreferenceForStudentAccount({
-      tenantId: String(req.user?.tenantId || ''),
-      studentAccountId,
+      tenantId: this.tenantId(req),
+      studentAccountId: studentAccountId.toString(),
       dto,
+      ipAddress: this.ip(req),
     });
   }
 
   // Send (queue) notification
-  @RequirePermissions('notifications.write')
   @Post('send')
-  send(@Req() req: any, @Body() dto: SendNotificationDto) {
-    return this.svc.send({ tenantId: String(req.user?.tenantId || ''), dto });
-  }
-
-  // List
-  @RequirePermissions('notifications.read')
-  @Get()
-  list(@Req() req: any, @Query() q: ListNotificationsQueryDto) {
-    return this.svc.listAll({ tenantId: String(req.user?.tenantId || ''), q });
-  }
-
-  // Mark status (test uchun)
   @RequirePermissions('notifications.write')
-  @Patch(':id/mark-sent')
-  markSent(@Req() req: any, @Param('id') id: string) {
-    return this.svc.markSent({
-      tenantId: String(req.user?.tenantId || ''),
-      id,
+  @ApiOperation({ summary: 'Queue a notification to be sent' })
+  send(@Req() req: any, @Body() dto: SendNotificationDto) {
+    return this.svc.send({
+      tenantId: this.tenantId(req),
+      userId: this.userId(req),
+      dto,
+      ipAddress: this.ip(req),
     });
   }
 
+  // List all notifications (staff)
+  @Get()
+  @RequirePermissions('notifications.read')
+  @ApiOperation({ summary: 'List all notifications' })
+  list(@Req() req: any, @Query() query: ListNotificationsQueryDto) {
+    return this.svc.listAll({
+      tenantId: this.tenantId(req),
+      query,
+    });
+  }
+
+  // Mark status (for testing)
+  @Patch(':id/mark-sent')
   @RequirePermissions('notifications.write')
+  @ApiOperation({ summary: 'Mark notification as sent (for testing)' })
+  markSent(@Req() req: any, @Param('id', ParseBigIntPipe) id: bigint) {
+    return this.svc.markSent({
+      tenantId: this.tenantId(req),
+      notificationId: id.toString(),
+      userId: this.userId(req),
+      ipAddress: this.ip(req),
+    });
+  }
+
   @Patch(':id/mark-failed')
-  markFailed(@Req() req: any, @Param('id') id: string) {
+  @RequirePermissions('notifications.write')
+  @ApiOperation({ summary: 'Mark notification as failed (for testing)' })
+  markFailed(@Req() req: any, @Param('id', ParseBigIntPipe) id: bigint) {
     return this.svc.markFailed({
-      tenantId: String(req.user?.tenantId || ''),
-      id,
+      tenantId: this.tenantId(req),
+      notificationId: id.toString(),
+      userId: this.userId(req),
+      ipAddress: this.ip(req),
     });
   }
 }
@@ -120,67 +172,58 @@ export class StaffNotificationsController {
 export class GuardianNotificationsController {
   constructor(private readonly svc: NotificationsService) {}
 
-  @Get('preferences')
-  myPref(@Req() req: any) {
-    const u = req.user;
-    if (!u || u.type !== 'GUARDIAN')
+  private tenantId(req: any): string {
+    return String(req.user?.tenantId || '');
+  }
+
+  private studentAccountId(req: any): string {
+    const user = req.user;
+    if (!user || user.type !== 'GUARDIAN')
       throw new UnauthorizedException('NOT_GUARDIAN');
+    return String(user.studentAccountId || '');
+  }
+
+  private ip(req: any): string | undefined {
+    const xf = String(req.headers?.['x-forwarded-for'] || '')
+      .split(',')[0]
+      ?.trim();
+    return xf || req.ip || req.connection?.remoteAddress || undefined;
+  }
+
+  @Get('preferences')
+  @ApiOperation({ summary: 'Get my notification preferences' })
+  myPref(@Req() req: any) {
     return this.svc.getOrCreateGuardianPref({
-      studentAccountId: String(u.studentAccountId || ''),
+      studentAccountId: this.studentAccountId(req),
     });
   }
 
   @Post('preferences')
+  @ApiOperation({ summary: 'Update my notification preferences' })
   updateMyPref(@Req() req: any, @Body() dto: UpsertNotificationPreferenceDto) {
-    const u = req.user;
-    if (!u || u.type !== 'GUARDIAN')
-      throw new UnauthorizedException('NOT_GUARDIAN');
     return this.svc.updateGuardianPref({
-      studentAccountId: String(u.studentAccountId || ''),
+      studentAccountId: this.studentAccountId(req),
       dto,
+      ipAddress: this.ip(req),
     });
   }
 
-  @ApiQuery({ name: 'from', required: false })
-  @ApiQuery({ name: 'to', required: false })
-  @ApiQuery({
-    name: 'status',
-    required: false,
-    enum: ['QUEUED', 'SENT', 'FAILED', 'READ'],
-  })
-  @ApiQuery({
-    name: 'channel',
-    required: false,
-    enum: ['IN_APP', 'TELEGRAM_BOT', 'SMS'],
-  })
   @Get()
-  myNotifications(
-    @Req() req: any,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-    @Query('status') status?: string,
-    @Query('channel') channel?: string,
-  ) {
-    const u = req.user;
-    if (!u || u.type !== 'GUARDIAN')
-      throw new UnauthorizedException('NOT_GUARDIAN');
+  @ApiOperation({ summary: 'List my notifications' })
+  myNotifications(@Req() req: any, @Query() query: ListNotificationsQueryDto) {
     return this.svc.listGuardian({
-      studentAccountId: String(u.studentAccountId || ''),
-      from,
-      to,
-      status,
-      channel,
+      studentAccountId: this.studentAccountId(req),
+      query,
     });
   }
 
   @Patch(':id/read')
-  markRead(@Req() req: any, @Param('id') id: string) {
-    const u = req.user;
-    if (!u || u.type !== 'GUARDIAN')
-      throw new UnauthorizedException('NOT_GUARDIAN');
+  @ApiOperation({ summary: 'Mark a notification as read' })
+  markRead(@Req() req: any, @Param('id', ParseBigIntPipe) id: bigint) {
     return this.svc.guardianMarkRead({
-      studentAccountId: String(u.studentAccountId || ''),
-      id,
+      studentAccountId: this.studentAccountId(req),
+      notificationId: id.toString(),
+      ipAddress: this.ip(req),
     });
   }
 }

@@ -1,5 +1,5 @@
+// apps/api/src/modules/assessments/assessments.module.ts
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '../../prisma/prisma.module';
 import { AssessmentsService } from './assessments.service';
 import {
   AssessmentsController,
@@ -7,8 +7,8 @@ import {
 } from './assessments.controller';
 
 @Module({
-  imports: [PrismaModule],
   controllers: [AssessmentsController, GuardianGradesController],
   providers: [AssessmentsService],
+  exports: [AssessmentsService],
 })
 export class AssessmentsModule {}

@@ -5,24 +5,37 @@ import {
   IsDateString,
   IsOptional,
   IsString,
-  MinLength,
+  Length,
 } from 'class-validator';
 
 export class CreateAcademicYearDto {
-  @ApiProperty({ example: '2025-2026' })
+  @ApiProperty({
+    example: '2026-2027',
+    description: 'Academic year name (unique per tenant). Example: 2026-2027',
+  })
   @IsString()
-  @MinLength(3)
+  @Length(2, 50)
   name!: string;
 
-  @ApiProperty({ example: '2025-09-01', description: 'YYYY-MM-DD' })
+  @ApiProperty({
+    example: '2026-09-01',
+    description: 'Start date (YYYY-MM-DD)',
+  })
   @IsDateString()
   startDate!: string;
 
-  @ApiProperty({ example: '2026-06-30', description: 'YYYY-MM-DD' })
+  @ApiProperty({
+    example: '2027-06-01',
+    description: 'End date (YYYY-MM-DD)',
+  })
   @IsDateString()
   endDate!: string;
 
-  @ApiPropertyOptional({ example: true })
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'If true, this year becomes current and other years become not current',
+  })
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()

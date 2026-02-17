@@ -1,8 +1,25 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+// apps/api/src/modules/risk/risk.service.ts
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditLogger } from '../../common/utils/audit.util';
+import { rethrowServiceError } from '../../common/utils/service-error.util';
 
-function levelFromScore(score: number) {
+import { SetRiskDto } from './dto/set-risk.dto';
+import { ListRiskQueryDto } from './dto/list-risk.query.dto';
+
+function toBigInt(value: unknown, field = 'id'): bigint {
+  const s = String(value ?? '').trim();
+  if (!/^\d+$/.test(s) || s === '0')
+    throw new BadRequestException(`INVALID_${field.toUpperCase()}`);
+  return BigInt(s);
+}
+
+function levelFromScore(score: number): 'GREEN' | 'YELLOW' | 'RED' {
   if (score <= 33) return 'GREEN';
   if (score <= 66) return 'YELLOW';
   return 'RED';
@@ -10,108 +27,284 @@ function levelFromScore(score: number) {
 
 @Injectable()
 export class RiskService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly auditLogger: AuditLogger;
 
-  async setRisk(args: { tenantId: string; createdByUserId: string; dto: any }) {
-    const tenantId = BigInt(args.tenantId);
-    const createdByUserId = args.createdByUserId
-      ? BigInt(args.createdByUserId)
-      : null;
-
-    const studentId = BigInt(args.dto.studentId);
-    const score = Number(args.dto.score);
-    const level = levelFromScore(score);
-    const note = args.dto.note ? String(args.dto.note) : null;
-
-    const s = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`SELECT id FROM students WHERE tenant_id=${tenantId} AND id=${studentId} LIMIT 1`,
-    );
-    if (!s.length) throw new BadRequestException('STUDENT_NOT_FOUND');
-
-    const signals = { manual: true, note };
-
-    // ⚠️ agar DB’da column nomlari farq qilsa, error textni tashlaysiz — 1:1 moslayman
-    const rows = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`
-    INSERT INTO student_risk_scores (
-      tenant_id, student_id, score, level, signals, calculated_at
-    )
-    VALUES (
-      ${tenantId}, ${studentId}, ${score}, ${level},
-      ${JSON.stringify(signals)}::jsonb, now()
-    )
-    RETURNING id
-  `,
-    );
-
-    return { ok: true, id: rows[0].id.toString(), level };
+  constructor(private readonly prisma: PrismaService) {
+    this.auditLogger = new AuditLogger(prisma);
   }
+
+  // ---------- Set risk score ----------
+
+  async setRisk(args: {
+    tenantId: string;
+    userId: string;
+    dto: SetRiskDto;
+    ipAddress?: string;
+  }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const student_id = toBigInt(args.dto.studentId, 'studentId');
+      const created_by_user_id = args.userId
+        ? toBigInt(args.userId, 'userId')
+        : null;
+
+      // Verify student exists and belongs to tenant
+      const student = await this.prisma.students.findFirst({
+        where: { id: student_id, tenant_id, archived_at: null },
+        select: { id: true, full_name: true },
+      });
+      if (!student) throw new NotFoundException('STUDENT_NOT_FOUND');
+
+      const score = args.dto.score;
+      const level = levelFromScore(score);
+      const signals = { manual: true, note: args.dto.note || null };
+
+      const riskScore = await this.prisma.student_risk_scores.create({
+        data: {
+          tenant_id,
+          student_id,
+          score,
+          level,
+          signals: JSON.stringify(signals),
+          note: args.dto.note?.trim() || null,
+          calculated_at: new Date(),
+        },
+      });
+
+      await this.auditLogger.log({
+        tenantId: tenant_id,
+        actorType: 'STAFF',
+        actorUserId: created_by_user_id,
+        action: 'CREATE',
+        entityType: 'student_risk_scores',
+        entityId: riskScore.id,
+        afterData: {
+          id: riskScore.id.toString(),
+          studentId: student_id.toString(),
+          studentName: student.full_name,
+          score,
+          level,
+        },
+        ipAddress: args.ipAddress,
+      });
+
+      return {
+        ok: true,
+        id: riskScore.id.toString(),
+        level,
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
+
+  // ---------- List risk scores (with filters) ----------
+
+  async listRisk(args: { tenantId: string; query: ListRiskQueryDto }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const page = args.query.page ?? 1;
+      const limit = Math.min(args.query.limit ?? 20, 200);
+      const skip = (page - 1) * limit;
+
+      const where: Prisma.student_risk_scoresWhereInput = {
+        tenant_id,
+      };
+
+      if (args.query.studentId) {
+        where.student_id = toBigInt(args.query.studentId, 'studentId');
+      }
+      if (args.query.level) {
+        where.level = args.query.level;
+      }
+      if (args.query.groupId) {
+        where.students = {
+          current_group_id: toBigInt(args.query.groupId, 'groupId'),
+        };
+      }
+
+      const [total, items] = await this.prisma.$transaction([
+        this.prisma.student_risk_scores.count({ where }),
+        this.prisma.student_risk_scores.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: [{ calculated_at: 'desc' }, { id: 'desc' }],
+          include: {
+            students: {
+              select: {
+                id: true,
+                full_name: true,
+                current_group_id: true,
+                groups: { select: { name: true } },
+              },
+            },
+          },
+        }),
+      ]);
+
+      return {
+        data: items.map((r) => ({
+          id: r.id.toString(),
+          studentId: r.student_id.toString(),
+          studentName: r.students.full_name,
+          groupId: r.students.current_group_id?.toString() || null,
+          groupName: r.students.groups?.name || null,
+          score: r.score,
+          level: r.level,
+          signals: r.signals ? JSON.parse(r.signals) : null,
+          note: r.note,
+          calculatedAt: r.calculated_at,
+        })),
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1,
+        },
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
+
+  // ---------- Latest risk score for all students in a group ----------
 
   async latestByGroup(args: { tenantId: string; groupId: string }) {
-    const tenantId = BigInt(args.tenantId);
-    const groupId = BigInt(args.groupId);
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const group_id = toBigInt(args.groupId, 'groupId');
 
-    const g = await this.prisma.$queryRaw<{ id: bigint }[]>(
-      Prisma.sql`SELECT id FROM groups WHERE tenant_id=${tenantId} AND id=${groupId} LIMIT 1`,
-    );
-    if (!g.length) throw new BadRequestException('GROUP_NOT_FOUND');
+      const group = await this.prisma.groups.findFirst({
+        where: { id: group_id, tenant_id },
+        select: { id: true },
+      });
+      if (!group) throw new NotFoundException('GROUP_NOT_FOUND');
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT
-          st.id AS student_id,
-          st.full_name,
-          lr.score,
-          lr.level,
-          lr.calculated_at
-        FROM students st
-        LEFT JOIN LATERAL (
-          SELECT score, level, calculated_at
-          FROM student_risk_scores r
-          WHERE r.tenant_id=${tenantId} AND r.student_id=st.id
-          ORDER BY r.calculated_at DESC, r.id DESC
-          LIMIT 1
-        ) lr ON true
-        WHERE st.tenant_id=${tenantId}
-          AND st.current_group_id=${groupId}
-          AND st.status='ACTIVE'
-        ORDER BY COALESCE(lr.score, 0) DESC, st.id ASC
-        LIMIT 200
-      `,
-    );
+      // Use Prisma raw query to get latest per student
+      // Alternatively, we could use groupBy and join, but raw is simpler here.
+      // However, we can also do this with a subquery using Prisma.
+      const students = await this.prisma.students.findMany({
+        where: {
+          tenant_id,
+          current_group_id: group_id,
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          full_name: true,
+          student_risk_scores: {
+            orderBy: { calculated_at: 'desc' },
+            take: 1,
+            select: {
+              score: true,
+              level: true,
+              calculated_at: true,
+            },
+          },
+        },
+      });
 
-    return { data: rows };
+      const data = students.map((s) => ({
+        studentId: s.id.toString(),
+        studentName: s.full_name,
+        score: s.student_risk_scores[0]?.score ?? null,
+        level: s.student_risk_scores[0]?.level ?? 'GREEN',
+        calculatedAt: s.student_risk_scores[0]?.calculated_at ?? null,
+      }));
+
+      return { data };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 
+  // ---------- Latest risk score for a single student ----------
+
+  async latestByStudent(args: { tenantId: string; studentId: string }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const student_id = toBigInt(args.studentId, 'studentId');
+
+      const student = await this.prisma.students.findFirst({
+        where: { id: student_id, tenant_id, archived_at: null },
+        select: { id: true, full_name: true },
+      });
+      if (!student) throw new NotFoundException('STUDENT_NOT_FOUND');
+
+      const latest = await this.prisma.student_risk_scores.findFirst({
+        where: { student_id, tenant_id },
+        orderBy: [{ calculated_at: 'desc' }, { id: 'desc' }],
+        select: {
+          id: true,
+          score: true,
+          level: true,
+          signals: true,
+          note: true,
+          calculated_at: true,
+        },
+      });
+
+      return {
+        data: latest
+          ? {
+              id: latest.id.toString(),
+              studentId: student_id.toString(),
+              studentName: student.full_name,
+              score: latest.score,
+              level: latest.level,
+              signals: latest.signals ? JSON.parse(latest.signals) : null,
+              note: latest.note,
+              calculatedAt: latest.calculated_at,
+            }
+          : null,
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
+
+  // ---------- Guardian: get latest risk score ----------
+
   async guardianMe(args: { studentAccountId: string }) {
-    const studentAccountId = BigInt(args.studentAccountId);
+    try {
+      const student_account_id = toBigInt(
+        args.studentAccountId,
+        'studentAccountId',
+      );
 
-    const base = await this.prisma.$queryRaw<
-      { student_id: bigint; tenant_id: bigint }[]
-    >(
-      Prisma.sql`
-        SELECT sa.student_id, s.tenant_id
-        FROM student_accounts sa
-        JOIN students s ON s.id = sa.student_id
-        WHERE sa.id=${studentAccountId}
-        LIMIT 1
-      `,
-    );
-    if (!base.length) throw new BadRequestException('ACCOUNT_NOT_FOUND');
+      const account = await this.prisma.student_accounts.findUnique({
+        where: { id: student_account_id },
+        include: {
+          students: { select: { tenant_id: true, id: true, full_name: true } },
+        },
+      });
+      if (!account) throw new NotFoundException('GUARDIAN_ACCOUNT_NOT_FOUND');
 
-    const studentId = base[0].student_id;
-    const tenantId = base[0].tenant_id;
+      const studentId = account.students.id;
+      const tenantId = account.students.tenant_id;
 
-    const rows = await this.prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT score, level, signals, calculated_at
-        FROM student_risk_scores r
-        WHERE r.tenant_id=${tenantId} AND r.student_id=${studentId}
-        ORDER BY r.calculated_at DESC, r.id DESC
-        LIMIT 1
-      `,
-    );
+      const latest = await this.prisma.student_risk_scores.findFirst({
+        where: { student_id: studentId, tenant_id: tenantId },
+        orderBy: [{ calculated_at: 'desc' }, { id: 'desc' }],
+        select: {
+          score: true,
+          level: true,
+          calculated_at: true,
+        },
+      });
 
-    return { data: rows.length ? rows[0] : null };
+      return {
+        student: {
+          id: studentId.toString(),
+          fullName: account.students.full_name,
+        },
+        risk: latest || null,
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
   }
 }
