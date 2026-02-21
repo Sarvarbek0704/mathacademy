@@ -11,6 +11,9 @@ import { rethrowServiceError } from '../../common/utils/service-error.util';
 import { CreateFileDto } from './dto/create-file.dto';
 import { UpdateFileDto } from './dto/update-file.dto';
 import { ListFilesQueryDto } from './dto/list-files.query.dto';
+import { UploadFileDto } from './dto/upload-file.dto';
+import { saveLocalFile, safeDeleteLocalFile } from './files.storage';
+import 'multer';
 
 function toBigInt(value: unknown, field = 'id'): bigint {
   const s = String(value ?? '').trim();
@@ -25,6 +28,99 @@ export class FilesService {
 
   constructor(private readonly prisma: PrismaService) {
     this.auditLogger = new AuditLogger(prisma);
+  }
+
+  private async assertOwnerExists(args: {
+    tenant_id: bigint;
+    ownerType: string;
+    owner_id: bigint;
+  }) {
+    const { tenant_id, ownerType, owner_id } = args;
+    switch (ownerType) {
+      case 'STUDENT': {
+        const s = await this.prisma.students.findFirst({
+          where: { id: owner_id, tenant_id },
+          select: { id: true },
+        });
+        if (!s) throw new NotFoundException('STUDENT_NOT_FOUND');
+        return;
+      }
+      case 'CERTIFICATE': {
+        const c = await this.prisma.certificates.findFirst({
+          where: { id: owner_id, tenant_id },
+          select: { id: true },
+        });
+        if (!c) throw new NotFoundException('CERTIFICATE_NOT_FOUND');
+        return;
+      }
+      case 'VIOLATION': {
+        const v = await this.prisma.violations.findFirst({
+          where: { id: owner_id, tenant_id },
+          select: { id: true },
+        });
+        if (!v) throw new NotFoundException('VIOLATION_NOT_FOUND');
+        return;
+      }
+      case 'ANNOUNCEMENT': {
+        const a = await this.prisma.announcements.findFirst({
+          where: { id: owner_id, tenant_id },
+          select: { id: true },
+        });
+        if (!a) throw new NotFoundException('ANNOUNCEMENT_NOT_FOUND');
+        return;
+      }
+      case 'EVENT': {
+        const e = await this.prisma.events.findFirst({
+          where: { id: owner_id, tenant_id },
+          select: { id: true },
+        });
+        if (!e) throw new NotFoundException('EVENT_NOT_FOUND');
+        return;
+      }
+      case 'COMPETITION': {
+        const c = await this.prisma.competitions.findFirst({
+          where: { id: owner_id, tenant_id },
+          select: { id: true },
+        });
+        if (!c) throw new NotFoundException('COMPETITION_NOT_FOUND');
+        return;
+      }
+      case 'AWARD': {
+        const a = await this.prisma.awards.findFirst({
+          where: { id: owner_id, tenant_id },
+          select: { id: true },
+        });
+        if (!a) throw new NotFoundException('AWARD_NOT_FOUND');
+        return;
+      }
+      case 'DISPLAY_ITEM': {
+        const p = await this.prisma.display_playlists.findFirst({
+          where: { id: owner_id, tenant_id },
+          select: { id: true },
+        });
+        if (!p) throw new NotFoundException('DISPLAY_PLAYLIST_NOT_FOUND');
+        return;
+      }
+
+      case 'USER': {
+        const u = await this.prisma.users.findFirst({
+          where: { id: owner_id, tenant_id },
+          select: { id: true },
+        });
+        if (!u) throw new NotFoundException('USER_NOT_FOUND');
+        return;
+      }
+      case 'GUARDIAN': {
+        const g = await this.prisma.student_accounts.findFirst({
+          where: { id: owner_id, tenant_id },
+          select: { id: true },
+        });
+        if (!g) throw new NotFoundException('GUARDIAN_NOT_FOUND');
+        return;
+      }
+      default:
+        return; // OTHER
+    }
   }
 
   async createFile(args: {
@@ -42,29 +138,11 @@ export class FilesService {
       let owner_id: bigint | null = null;
       if (args.dto.ownerId) {
         owner_id = toBigInt(args.dto.ownerId, 'ownerId');
-        // Validate owner exists based on ownerType
-        if (args.dto.ownerType === 'STUDENT') {
-          const student = await this.prisma.students.findFirst({
-            where: { id: owner_id, tenant_id },
-          });
-          if (!student) throw new NotFoundException('STUDENT_NOT_FOUND');
-        } else if (args.dto.ownerType === 'CERTIFICATE') {
-          const cert = await this.prisma.certificates.findFirst({
-            where: { id: owner_id, tenant_id },
-          });
-          if (!cert) throw new NotFoundException('CERTIFICATE_NOT_FOUND');
-        } else if (args.dto.ownerType === 'VIOLATION') {
-          const viol = await this.prisma.violations.findFirst({
-            where: { id: owner_id, tenant_id },
-          });
-          if (!viol) throw new NotFoundException('VIOLATION_NOT_FOUND');
-        } else if (args.dto.ownerType === 'ANNOUNCEMENT') {
-          const ann = await this.prisma.announcements.findFirst({
-            where: { id: owner_id, tenant_id },
-          });
-          if (!ann) throw new NotFoundException('ANNOUNCEMENT_NOT_FOUND');
-        }
-        // OTHER type: no validation
+        await this.assertOwnerExists({
+          tenant_id,
+          ownerType: args.dto.ownerType,
+          owner_id,
+        });
       }
 
       const file = await this.prisma.files.create({
@@ -72,10 +150,15 @@ export class FilesService {
           tenant_id,
           owner_type: args.dto.ownerType,
           owner_id,
+          purpose: args.dto.purpose,
           file_name: args.dto.fileName,
           mime_type: args.dto.mimeType,
           size_bytes: args.dto.sizeBytes,
           url: args.dto.url,
+          storage_provider: args.dto.url?.startsWith('/uploads/')
+            ? 'LOCAL'
+            : 'EXTERNAL',
+          storage_path: null,
           uploaded_by_user_id,
         },
       });
@@ -100,10 +183,12 @@ export class FilesService {
         id: file.id.toString(),
         fileName: file.file_name,
         mimeType: file.mime_type,
-        sizeBytes: file.size_bytes,
+        sizeBytes: file.size_bytes ? Number(file.size_bytes) : null,
         url: file.url,
         ownerType: file.owner_type,
         ownerId: file.owner_id?.toString(),
+        purpose: file.purpose,
+        storageProvider: file.storage_provider,
         uploadedBy: args.userId,
         createdAt: file.created_at,
       };
@@ -129,6 +214,9 @@ export class FilesService {
       }
       if (args.query.q) {
         where.file_name = { contains: args.query.q, mode: 'insensitive' };
+      }
+      if (args.query.purpose) {
+        (where as any).purpose = args.query.purpose;
       }
 
       const orderBy: Prisma.filesOrderByWithRelationInput = {};
@@ -156,10 +244,12 @@ export class FilesService {
           id: f.id.toString(),
           fileName: f.file_name,
           mimeType: f.mime_type,
-          sizeBytes: f.size_bytes,
+          sizeBytes: f.size_bytes ? Number(f.size_bytes) : null,
           url: f.url,
           ownerType: f.owner_type,
           ownerId: f.owner_id?.toString(),
+          purpose: (f as any).purpose ?? null,
+          storageProvider: (f as any).storage_provider ?? null,
           uploadedBy: f.users?.full_name || null,
           createdAt: f.created_at,
         })),
@@ -194,10 +284,12 @@ export class FilesService {
         id: file.id.toString(),
         fileName: file.file_name,
         mimeType: file.mime_type,
-        sizeBytes: file.size_bytes,
+        sizeBytes: file.size_bytes ? Number(file.size_bytes) : null,
         url: file.url,
         ownerType: file.owner_type,
         ownerId: file.owner_id?.toString(),
+        purpose: (file as any).purpose ?? null,
+        storageProvider: (file as any).storage_provider ?? null,
         uploadedBy: file.users?.full_name || null,
         createdAt: file.created_at,
       };
@@ -233,27 +325,11 @@ export class FilesService {
           : file.owner_id;
 
         if (newOwnerId) {
-          if (newOwnerType === 'STUDENT') {
-            const student = await this.prisma.students.findFirst({
-              where: { id: newOwnerId, tenant_id },
-            });
-            if (!student) throw new NotFoundException('STUDENT_NOT_FOUND');
-          } else if (newOwnerType === 'CERTIFICATE') {
-            const cert = await this.prisma.certificates.findFirst({
-              where: { id: newOwnerId, tenant_id },
-            });
-            if (!cert) throw new NotFoundException('CERTIFICATE_NOT_FOUND');
-          } else if (newOwnerType === 'VIOLATION') {
-            const viol = await this.prisma.violations.findFirst({
-              where: { id: newOwnerId, tenant_id },
-            });
-            if (!viol) throw new NotFoundException('VIOLATION_NOT_FOUND');
-          } else if (newOwnerType === 'ANNOUNCEMENT') {
-            const ann = await this.prisma.announcements.findFirst({
-              where: { id: newOwnerId, tenant_id },
-            });
-            if (!ann) throw new NotFoundException('ANNOUNCEMENT_NOT_FOUND');
-          }
+          await this.assertOwnerExists({
+            tenant_id,
+            ownerType: newOwnerType,
+            owner_id: newOwnerId,
+          });
         }
       }
 
@@ -265,6 +341,8 @@ export class FilesService {
           : null;
       }
       if (args.dto.fileName) updateData.file_name = args.dto.fileName;
+      if (args.dto.purpose !== undefined)
+        (updateData as any).purpose = args.dto.purpose;
       if (args.dto.mimeType !== undefined)
         updateData.mime_type = args.dto.mimeType;
       if (args.dto.sizeBytes !== undefined)
@@ -292,10 +370,122 @@ export class FilesService {
         id: updated.id.toString(),
         fileName: updated.file_name,
         mimeType: updated.mime_type,
-        sizeBytes: updated.size_bytes,
+        sizeBytes: updated.size_bytes ? Number(updated.size_bytes) : null,
         url: updated.url,
         ownerType: updated.owner_type,
         ownerId: updated.owner_id?.toString(),
+        purpose: (updated as any).purpose ?? null,
+        storageProvider: (updated as any).storage_provider ?? null,
+      };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
+
+  async uploadLocalFile(args: {
+    tenantId: string;
+    actorType: 'STAFF' | 'GUARDIAN';
+    userId?: string;
+    studentAccountId?: string;
+    dto: UploadFileDto;
+    file: Express.Multer.File;
+    ipAddress?: string;
+  }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+      const uploaded_by_user_id =
+        args.actorType === 'STAFF' && args.userId
+          ? toBigInt(args.userId, 'userId')
+          : null;
+      const actor_student_account_id =
+        args.actorType === 'GUARDIAN' && args.studentAccountId
+          ? toBigInt(args.studentAccountId, 'studentAccountId')
+          : null;
+
+      if (!args.file?.buffer) throw new BadRequestException('NO_FILE');
+
+      const ownerIdStr = args.dto.ownerId;
+      let owner_id: bigint | null = null;
+      if (ownerIdStr) {
+        owner_id = toBigInt(ownerIdStr, 'ownerId');
+        await this.assertOwnerExists({
+          tenant_id,
+          ownerType: args.dto.ownerType,
+          owner_id,
+        });
+      }
+
+      // optional: single-avatar rule
+      const purpose = args.dto.purpose?.trim() || null;
+      if (
+        purpose &&
+        ['USER_AVATAR', 'GUARDIAN_AVATAR', 'STUDENT_PHOTO'].includes(purpose)
+      ) {
+        await this.prisma.files.deleteMany({
+          where: {
+            tenant_id,
+            owner_type: args.dto.ownerType,
+            owner_id,
+            purpose,
+          },
+        });
+      }
+
+      const saved = await saveLocalFile({
+        tenantId: String(tenant_id),
+        ownerType: args.dto.ownerType,
+        ownerId: owner_id?.toString() ?? null,
+        purpose,
+        originalName: args.dto.fileName || args.file.originalname,
+        mimeType: args.file.mimetype,
+        buffer: args.file.buffer,
+      });
+
+      const created = await this.prisma.files.create({
+        data: {
+          tenant_id,
+          owner_type: args.dto.ownerType,
+          owner_id,
+          purpose,
+          file_name: args.dto.fileName || args.file.originalname,
+          mime_type: args.file.mimetype,
+          size_bytes: BigInt(args.file.size || args.file.buffer.length),
+          url: saved.url,
+          storage_provider: saved.provider,
+          storage_path: saved.storagePath,
+          uploaded_by_user_id,
+        },
+      });
+
+      await this.auditLogger.log({
+        tenantId: tenant_id,
+        actorType: args.actorType,
+        actorUserId: uploaded_by_user_id,
+        actorStudentAccountId: actor_student_account_id || undefined,
+        action: 'CREATE',
+        entityType: 'files',
+        entityId: created.id,
+        afterData: {
+          id: created.id.toString(),
+          fileName: created.file_name,
+          ownerType: created.owner_type,
+          ownerId: created.owner_id?.toString(),
+          purpose: created.purpose,
+        },
+        ipAddress: args.ipAddress,
+      });
+
+      return {
+        id: created.id.toString(),
+        fileName: created.file_name,
+        mimeType: created.mime_type,
+        sizeBytes: created.size_bytes ? Number(created.size_bytes) : null,
+        url: created.url,
+        ownerType: created.owner_type,
+        ownerId: created.owner_id?.toString(),
+        purpose: created.purpose,
+        storageProvider: created.storage_provider,
+        createdAt: created.created_at,
       };
     } catch (error) {
       rethrowServiceError(error);
@@ -332,6 +522,10 @@ export class FilesService {
       }
 
       await this.prisma.files.delete({ where: { id: file_id } });
+
+      if (file.storage_provider === 'LOCAL') {
+        await safeDeleteLocalFile(file.storage_path);
+      }
 
       await this.auditLogger.log({
         tenantId: tenant_id,

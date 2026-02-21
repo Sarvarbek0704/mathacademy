@@ -2,6 +2,7 @@ import { plainToInstance } from 'class-transformer';
 import {
   IsEnum,
   IsInt,
+  IsOptional,
   IsString,
   Min,
   Max,
@@ -25,6 +26,23 @@ class EnvironmentVariables {
   @Min(3000)
   @Max(65535)
   PORT: number = 4000;
+
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  WEB_PORT: number = 3000;
+
+  @IsOptional()
+  @IsString()
+  WEB_ORIGINS?: string;
+
+  @IsString()
+  UPLOAD_DIR: string = 'uploads';
+
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  MAX_UPLOAD_MB: number = 25;
 
   @IsString()
   JWT_ACCESS_SECRET: string;

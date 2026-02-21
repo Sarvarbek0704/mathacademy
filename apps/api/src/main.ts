@@ -3,6 +3,9 @@ import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
+import express from 'express';
+import { existsSync, mkdirSync } from 'fs';
+import { resolve } from 'path';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
@@ -31,6 +34,18 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {});
   const globalPrefix = 'api';
   const port = Number(process.env.PORT) || 4000;
+
+  // Serve uploaded files (local storage)
+  const uploadDir = resolve(process.env.UPLOAD_DIR || 'uploads');
+  if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
+  app.use(
+    '/uploads',
+    express.static(uploadDir, {
+      maxAge: process.env.NODE_ENV === 'production' ? '30d' : 0,
+      etag: true,
+      fallthrough: true,
+    }),
+  );
 
   app.setGlobalPrefix(globalPrefix);
   app.use(cookieParser());

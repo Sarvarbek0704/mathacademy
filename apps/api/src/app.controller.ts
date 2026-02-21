@@ -9,4 +9,13 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  @Get('health')
+  health() {
+    return {
+      ok: true,
+      service: 'mathacademy-digital-campus-api',
+      ts: new Date().toISOString(),
+    };
+  }
 }

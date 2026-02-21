@@ -12,11 +12,35 @@ import {
 
 export class ListFilesQueryDto {
   @ApiPropertyOptional({
-    enum: ['STUDENT', 'CERTIFICATE', 'VIOLATION', 'ANNOUNCEMENT', 'OTHER'],
+    enum: [
+      'STUDENT',
+      'USER',
+      'GUARDIAN',
+      'CERTIFICATE',
+      'VIOLATION',
+      'ANNOUNCEMENT',
+      'EVENT',
+      'COMPETITION',
+      'AWARD',
+      'DISPLAY_ITEM',
+      'OTHER',
+    ],
   })
   @IsOptional()
   @IsString()
-  @IsIn(['STUDENT', 'CERTIFICATE', 'VIOLATION', 'ANNOUNCEMENT', 'OTHER'])
+  @IsIn([
+    'STUDENT',
+    'USER',
+    'GUARDIAN',
+    'CERTIFICATE',
+    'VIOLATION',
+    'ANNOUNCEMENT',
+    'EVENT',
+    'COMPETITION',
+    'AWARD',
+    'DISPLAY_ITEM',
+    'OTHER',
+  ])
   ownerType?: string;
 
   @ApiPropertyOptional({ example: '123', description: 'Owner ID' })
@@ -24,6 +48,11 @@ export class ListFilesQueryDto {
   @IsString()
   @Matches(/^\d+$/)
   ownerId?: string;
+
+  @ApiPropertyOptional({ example: 'STUDENT_PHOTO', description: 'Purpose/tag' })
+  @IsOptional()
+  @IsString()
+  purpose?: string;
 
   @ApiPropertyOptional({
     example: 'report',

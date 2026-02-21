@@ -1,17 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsString,
-  IsOptional,
-  IsInt,
-  Min,
-  Max,
-  IsIn,
-  Matches,
-  MaxLength,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
-export class CreateFileDto {
+export class UploadFileDto {
   @ApiProperty({
     example: 'STUDENT',
     enum: [
@@ -46,18 +36,12 @@ export class CreateFileDto {
 
   @ApiPropertyOptional({
     example: '123',
-    description:
-      'Owner ID (numeric string), required if ownerType is STUDENT/CERTIFICATE/VIOLATION',
+    description: 'Owner ID (numeric string). Required for most owner types.',
   })
   @IsOptional()
   @IsString()
   @Matches(/^\d+$/, { message: 'ownerId must be numeric string' })
   ownerId?: string;
-
-  @ApiProperty({ example: 'report.pdf', description: 'File name' })
-  @IsString()
-  @MaxLength(255)
-  fileName!: string;
 
   @ApiPropertyOptional({
     example: 'STUDENT_PHOTO',
@@ -68,25 +52,12 @@ export class CreateFileDto {
   @MaxLength(30)
   purpose?: string;
 
-  @ApiPropertyOptional({ example: 'application/pdf', description: 'MIME type' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  mimeType?: string;
-
-  @ApiPropertyOptional({ example: 1024000, description: 'File size in bytes' })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100 * 1024 * 1024) // 100MB max
-  sizeBytes?: number;
-
-  @ApiProperty({
-    example: '/uploads/report.pdf',
-    description: 'File URL or path',
+  @ApiPropertyOptional({
+    example: 'avatar.jpg',
+    description: 'Original file name override (optional)',
   })
+  @IsOptional()
   @IsString()
-  @MaxLength(500)
-  url!: string;
+  @MaxLength(255)
+  fileName?: string;
 }

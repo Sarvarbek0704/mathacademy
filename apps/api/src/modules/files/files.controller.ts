@@ -9,6 +9,8 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -16,7 +18,11 @@ import {
   ApiOperation,
   ApiParam,
   ApiResponse,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
+
+import { FileInterceptor } from '@nestjs/platform-express';
 
 import { PermissionsGuard } from '../../common/guards/perms.guard';
 import { RequirePermissions } from '../../common/decorators/perms.decorator';
@@ -26,6 +32,10 @@ import { FilesService } from './files.service';
 import { CreateFileDto } from './dto/create-file.dto';
 import { UpdateFileDto } from './dto/update-file.dto';
 import { ListFilesQueryDto } from './dto/list-files.query.dto';
+import { UploadFileDto } from './dto/upload-file.dto';
+import { getMaxUploadBytes } from './files.storage';
+import 'multer';
+
 
 @ApiTags('Staff - Files')
 @ApiBearerAuth('access-token')
@@ -108,6 +118,47 @@ export class FilesController {
       tenantId: this.tenantId(req),
       fileId: id.toString(),
       userId: this.userId(req),
+      ipAddress: this.ip(req),
+    });
+  }
+
+  @Post('upload')
+  @RequirePermissions('files.write')
+  @ApiOperation({
+    summary: 'Upload file (multipart/form-data) to local storage',
+    description:
+      'Stores file on disk (UPLOAD_DIR) and creates a DB record in files table.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        ownerType: { type: 'string', example: 'STUDENT' },
+        ownerId: { type: 'string', example: '123' },
+        purpose: { type: 'string', example: 'STUDENT_PHOTO' },
+        fileName: { type: 'string', example: 'photo.jpg' },
+        file: { type: 'string', format: 'binary' },
+      },
+      required: ['ownerType', 'file'],
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: getMaxUploadBytes() },
+    }),
+  )
+  upload(
+    @Req() req: any,
+    @Body() dto: UploadFileDto,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.svc.uploadLocalFile({
+      tenantId: this.tenantId(req),
+      actorType: 'STAFF',
+      userId: this.userId(req),
+      dto,
+      file,
       ipAddress: this.ip(req),
     });
   }

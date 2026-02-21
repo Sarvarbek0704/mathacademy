@@ -784,6 +784,17 @@ export class AuthService {
         },
       });
 
+      const avatar = await this.prisma.files.findFirst({
+        where: {
+          tenant_id: BigInt(user.tenantId),
+          owner_type: 'USER',
+          owner_id: BigInt(user.userId),
+          purpose: 'USER_AVATAR',
+        },
+        orderBy: { created_at: 'desc' },
+        select: { url: true },
+      });
+
       return {
         ok: true,
         user: {
@@ -792,7 +803,10 @@ export class AuthService {
           userId: user.userId,
           roles: user.roles,
           permissions: user.permissions,
-          profile: staffUser,
+          profile: {
+            ...staffUser,
+            avatarUrl: avatar?.url || null,
+          },
         },
       };
     } else if (user.type === 'GUARDIAN' && user.studentAccountId) {
@@ -820,6 +834,17 @@ export class AuthService {
         },
       });
 
+      const avatar = await this.prisma.files.findFirst({
+        where: {
+          tenant_id: BigInt(user.tenantId),
+          owner_type: 'GUARDIAN',
+          owner_id: BigInt(user.studentAccountId),
+          purpose: 'GUARDIAN_AVATAR',
+        },
+        orderBy: { created_at: 'desc' },
+        select: { url: true },
+      });
+
       return {
         ok: true,
         user: {
@@ -827,7 +852,10 @@ export class AuthService {
           type: 'GUARDIAN',
           studentAccountId: user.studentAccountId,
           studentId: user.studentId,
-          profile: guardianAccount,
+          profile: {
+            ...guardianAccount,
+            avatarUrl: avatar?.url || null,
+          },
         },
       };
     }

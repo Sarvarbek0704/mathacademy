@@ -40,43 +40,65 @@ async function main() {
 
   // 2. Permissions
   const permissions = [
-    'students.read',
-    'students.write',
-    'groups.read',
-    'groups.write',
-    'attendance.read',
-    'attendance.write',
-    'assessments.read',
-    'assessments.write',
-    'ranking.read',
-    'risk.read',
-    'billing.read',
-    'billing.write',
-    'notifications.read',
-    'notifications.write',
-    'events.read',
-    'competitions.read',
-    'awards.read',
-    'displays.read',
-    'permissions.manage',
-    'roles.manage',
-    'users.manage',
-    'dorms.read',
-    'dorms.write',
-    'dorms.assign',
-    'files.read',
-    'files.write',
-    'campuses.read',
-    'campuses.write',
-    'subjects.read',
-    'subjects.write',
-    'tracks.read',
-    'tracks.write',
-    'cohorts.read',
-    'cohorts.write',
+    // Generated from all RequirePermissions() occurrences in controllers
+    'academic_years.delete',
+    'academic_years.read',
+    'academic_years.write',
     'announcements.read',
     'announcements.write',
-    'system.settings',
+    'assessments.read',
+    'assessments.write',
+    'attendance.read',
+    'attendance.write',
+    'awards.read',
+    'awards.write',
+    'billing.read',
+    'billing.write',
+    'campuses.read',
+    'campuses.write',
+    'certificates.read',
+    'certificates.write',
+    'cohorts.read',
+    'cohorts.write',
+    'competitions.read',
+    'competitions.write',
+    'discipline.read',
+    'discipline.write',
+    'displays.read',
+    'displays.write',
+    'dorms.assign',
+    'dorms.read',
+    'dorms.write',
+    'events.read',
+    'events.write',
+    'files.read',
+    'files.write',
+    'groups.read',
+    'groups.write',
+    'leaves.read',
+    'leaves.write',
+    'notifications.read',
+    'notifications.write',
+    'outcomes.read',
+    'outcomes.write',
+    'permissions.manage',
+    'permissions.view',
+    'ranking.read',
+    'ranking.write',
+    'risk.read',
+    'risk.write',
+    'roles.manage',
+    'roles.view',
+    'students.read',
+    'students.write',
+    'subjects.read',
+    'subjects.write',
+    'timetable.read',
+    'timetable.write',
+    'tracks.read',
+    'tracks.write',
+    'users.manage',
+    'users.view',
   ];
 
   const permissionRecords: any[] = [];
@@ -97,6 +119,26 @@ async function main() {
     create: { tenant_id: tenant.id, name: 'SUPERADMIN' },
   });
 
+  const adminRole = await prisma.roles.upsert({
+    where: { tenant_id_name: { tenant_id: tenant.id, name: 'ADMIN' } },
+    update: {},
+    create: { tenant_id: tenant.id, name: 'ADMIN' },
+  });
+
+  const teacherRole = await prisma.roles.upsert({
+    where: { tenant_id_name: { tenant_id: tenant.id, name: 'TEACHER' } },
+    update: {},
+    create: { tenant_id: tenant.id, name: 'TEACHER' },
+  });
+
+  const assistantTeacherRole = await prisma.roles.upsert({
+    where: {
+      tenant_id_name: { tenant_id: tenant.id, name: 'ASSISTANT_TEACHER' },
+    },
+    update: {},
+    create: { tenant_id: tenant.id, name: 'ASSISTANT_TEACHER' },
+  });
+
   for (const perm of permissionRecords) {
     await prisma.role_permissions.upsert({
       where: {
@@ -112,6 +154,65 @@ async function main() {
       },
     });
   }
+
+  // Default permission sets (Superadmin can later customize)
+  const allCodes = new Set(permissionRecords.map((p) => p.code));
+  const denyAdmin = new Set(['permissions.manage', 'roles.manage', 'users.manage']);
+
+  const teacherAllow = new Set([
+    'students.read',
+    'groups.read',
+    'campuses.read',
+    'subjects.read',
+    'tracks.read',
+    'academic_years.read',
+    'cohorts.read',
+    'timetable.read',
+    'attendance.read',
+    'attendance.write',
+    'assessments.read',
+    'assessments.write',
+    'ranking.read',
+    'risk.read',
+    'discipline.read',
+    'discipline.write',
+    'leaves.read',
+    'events.read',
+    'competitions.read',
+    'awards.read',
+    'announcements.read',
+    'files.read',
+  ]);
+
+  const assistantAllow = new Set([
+    ...teacherAllow,
+    'files.write',
+    'events.write',
+  ]);
+
+  async function attachPerms(roleId: bigint, allowCodes: Set<string>) {
+    const perms = permissionRecords.filter((p) => allowCodes.has(p.code));
+    for (const perm of perms) {
+      await prisma.role_permissions.upsert({
+        where: {
+          role_id_permission_id: {
+            role_id: roleId,
+            permission_id: perm.id,
+          },
+        },
+        update: {},
+        create: { role_id: roleId, permission_id: perm.id },
+      });
+    }
+  }
+
+  // ADMIN: everything except a few management-only permissions
+  await attachPerms(
+    adminRole.id,
+    new Set([...allCodes].filter((c) => !denyAdmin.has(c))),
+  );
+  await attachPerms(teacherRole.id, teacherAllow);
+  await attachPerms(assistantTeacherRole.id, assistantAllow);
 
   // 4. Superadmin foydalanuvchi
   const adminPassword = await bcrypt.hash('pass1234', 10);
