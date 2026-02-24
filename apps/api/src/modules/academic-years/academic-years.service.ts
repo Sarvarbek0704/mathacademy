@@ -116,7 +116,7 @@ export class AcademicYearsService {
         },
       });
 
-      if (!row) throw new NotFoundException('CURRENT_ACADEMIC_YEAR_NOT_SET');
+      if (!row) return ok(null);
 
       return ok({
         id: row.id.toString(),

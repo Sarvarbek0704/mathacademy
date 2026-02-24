@@ -6,7 +6,8 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, GraduationCap, ClipboardList, UserCheck, Shield,
-  Receipt, Trophy, Bell, ScrollText, LogOut, Sun, Moon, PanelLeftClose, PanelLeft, Loader2
+  Receipt, Trophy, Bell, ScrollText, LogOut, Sun, Moon, PanelLeftClose, PanelLeft, Loader2,
+  CalendarDays, Megaphone
 } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -14,8 +15,10 @@ import { Button } from '@/components/ui/button';
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/guardian/dashboard' },
   { label: "O'quvchi profili", icon: GraduationCap, path: '/guardian/student' },
+  { label: 'Dars jadvali', icon: CalendarDays, path: '/guardian/timetable' },
   { label: 'Baholar', icon: ClipboardList, path: '/guardian/grades' },
   { label: 'Davomat', icon: UserCheck, path: '/guardian/attendance' },
+  { label: 'E\'lonlar', icon: Megaphone, path: '/guardian/announcements' },
   { label: 'Intizom', icon: Shield, path: '/guardian/discipline' },
   { label: "To'lovlar", icon: Receipt, path: '/guardian/billing' },
   { label: 'Tadbirlar', icon: Trophy, path: '/guardian/events' },

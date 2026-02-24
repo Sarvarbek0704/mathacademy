@@ -828,4 +828,45 @@ export class EventsService {
       rethrowServiceError(error);
     }
   }
+
+  async getEventSummary(tenantId: string) {
+    const tenant_id = toBigInt(tenantId, 'tenantId');
+    const now = new Date();
+    const endOfWeek = new Date();
+    endOfWeek.setDate(now.getDate() + 7);
+
+    const activeCount = await this.prisma.events.count({
+      where: {
+        tenant_id,
+        starts_at: { lte: endOfWeek },
+        OR: [{ ends_at: { gte: now } }, { ends_at: null }],
+      },
+    });
+
+    return { activeCount };
+  }
+
+  async getUpcomingEvents(tenantId: string) {
+    const tenant_id = toBigInt(tenantId, 'tenantId');
+    const now = new Date();
+
+    const events = await this.prisma.events.findMany({
+      where: {
+        tenant_id,
+        starts_at: { gte: now },
+      },
+      orderBy: { starts_at: 'asc' },
+      take: 5,
+      include: {
+        campuses: { select: { name: true } },
+      },
+    });
+
+    return events.map((e) => ({
+      id: e.id.toString(),
+      title: e.title,
+      startAt: e.starts_at,
+      location: e.campuses?.name || null,
+    }));
+  }
 }

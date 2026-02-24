@@ -19,7 +19,8 @@ interface NavItem {
   label: string;
   icon: any;
   path?: string;
-  children?: { label: string; path: string; icon: any }[];
+  permission?: string;
+  children?: { label: string; path: string; icon: any; permission?: string }[];
 }
 
 const navGroups: NavItem[] = [
@@ -27,66 +28,66 @@ const navGroups: NavItem[] = [
   {
     label: 'Akademik', icon: BookOpen,
     children: [
-      { label: "O'quv yillari", path: '/staff/academic-years', icon: Calendar },
-      { label: 'Guruhlar', path: '/staff/groups', icon: UsersRound },
-      { label: "Yo'nalishlar", path: '/staff/tracks', icon: Route },
-      { label: 'Kohortalar', path: '/staff/cohorts', icon: Layers },
-      { label: 'Fanlar', path: '/staff/subjects', icon: BookMarked },
-      { label: 'Dars jadvali', path: '/staff/timetable', icon: Clock },
+      { label: "O'quv yillari", path: '/staff/academic-years', icon: Calendar, permission: 'academicYears.read' },
+      { label: 'Guruhlar', path: '/staff/groups', icon: UsersRound, permission: 'groups.read' },
+      { label: "Yo'nalishlar", path: '/staff/tracks', icon: Route, permission: 'tracks.read' },
+      { label: 'Kohortalar', path: '/staff/cohorts', icon: Layers, permission: 'cohorts.read' },
+      { label: 'Fanlar', path: '/staff/subjects', icon: BookMarked, permission: 'subjects.read' },
+      { label: 'Dars jadvali', path: '/staff/timetable', icon: Clock, permission: 'timetable.read' },
     ],
   },
   {
     label: "O'quvchilar", icon: GraduationCap,
     children: [
-      { label: "Barcha o'quvchilar", path: '/staff/students', icon: GraduationCap },
-      { label: 'Davomat', path: '/staff/attendance', icon: UserCheck },
-      { label: "Ta'til so'rovlari", path: '/staff/leaves', icon: FileText },
+      { label: "Barcha o'quvchilar", path: '/staff/students', icon: GraduationCap, permission: 'students.read' },
+      { label: 'Davomat', path: '/staff/attendance', icon: UserCheck, permission: 'attendance.read' },
+      { label: "Ta'til so'rovlari", path: '/staff/leaves', icon: FileText, permission: 'leaves.read' },
     ],
   },
   {
     label: 'Baholash', icon: ClipboardList,
     children: [
-      { label: 'Testlar', path: '/staff/assessments', icon: ClipboardList },
-      { label: 'Reyting', path: '/staff/ranking', icon: BarChart3 },
-      { label: 'Risk bahosi', path: '/staff/risk', icon: AlertTriangle },
+      { label: 'Testlar', path: '/staff/assessments', icon: ClipboardList, permission: 'assessments.read' },
+      { label: 'Reyting', path: '/staff/ranking', icon: BarChart3, permission: 'ranking.read' },
+      { label: 'Risk bahosi', path: '/staff/risk', icon: AlertTriangle, permission: 'risk.read' },
     ],
   },
   {
     label: 'Intizom', icon: Shield,
     children: [
-      { label: 'Qoidabuzarliklar', path: '/staff/violations', icon: Flag },
-      { label: 'Jazolar', path: '/staff/discipline-actions', icon: Scale },
+      { label: 'Qoidabuzarliklar', path: '/staff/violations', icon: Flag, permission: 'violations.read' },
+      { label: 'Jazolar', path: '/staff/discipline-actions', icon: Scale, permission: 'disciplineActions.read' },
     ],
   },
   {
     label: 'Moliya', icon: DollarSign,
     children: [
-      { label: "To'lovlar", path: '/staff/payments', icon: Receipt },
-      { label: 'Hisob-fakturalar', path: '/staff/invoices', icon: FileText },
-      { label: 'Ovqat billing', path: '/staff/meal-billing', icon: Utensils },
-      { label: 'Yotoqxona billing', path: '/staff/dorm-billing', icon: BedDouble },
+      { label: "To'lovlar", path: '/staff/payments', icon: Receipt, permission: 'payments.read' },
+      { label: 'Hisob-fakturalar', path: '/staff/invoices', icon: FileText, permission: 'invoices.read' },
+      { label: 'Ovqat billing', path: '/staff/meal-billing', icon: Utensils, permission: 'billing.read' },
+      { label: 'Yotoqxona billing', path: '/staff/dorm-billing', icon: BedDouble, permission: 'billing.read' },
     ],
   },
   {
     label: 'Tadbirlar', icon: Trophy,
     children: [
-      { label: 'Tadbirlar', path: '/staff/events', icon: Trophy },
-      { label: 'Musobaqalar', path: '/staff/competitions', icon: Award },
-      { label: 'Mukofotlar', path: '/staff/awards', icon: Award },
-      { label: 'Sertifikatlar', path: '/staff/certificates', icon: ScrollText },
+      { label: 'Tadbirlar', path: '/staff/events', icon: Trophy, permission: 'events.read' },
+      { label: 'Musobaqalar', path: '/staff/competitions', icon: Award, permission: 'competitions.read' },
+      { label: 'Mukofotlar', path: '/staff/awards', icon: Award, permission: 'awards.read' },
+      { label: 'Sertifikatlar', path: '/staff/certificates', icon: ScrollText, permission: 'certificates.read' },
     ],
   },
   {
     label: 'Tizim', icon: Settings,
     children: [
-      { label: 'Foydalanuvchilar', path: '/staff/users', icon: Users },
-      { label: 'Rollar', path: '/staff/roles', icon: Shield },
-      { label: "E'lonlar", path: '/staff/announcements', icon: Megaphone },
-      { label: 'Bildirishnomalar', path: '/staff/notifications', icon: Bell },
-      { label: 'Monitorlar', path: '/staff/displays', icon: Monitor },
-      { label: 'Yotoqxonalar', path: '/staff/dorms', icon: Home },
-      { label: 'Kampuslar', path: '/staff/campuses', icon: Building2 },
-      { label: 'Fayllar', path: '/staff/files', icon: FolderOpen },
+      { label: 'Foydalanuvchilar', path: '/staff/users', icon: Users, permission: 'users.read' },
+      { label: 'Rollar', path: '/staff/roles', icon: Shield, permission: 'roles.read' },
+      { label: "E'lonlar", path: '/staff/announcements', icon: Megaphone, permission: 'announcements.read' },
+      { label: 'Bildirishnomalar', path: '/staff/notifications', icon: Bell, permission: 'notifications.read' },
+      { label: 'Monitorlar', path: '/staff/displays', icon: Monitor, permission: 'displays.read' },
+      { label: 'Yotoqxonalar', path: '/staff/dorms', icon: Home, permission: 'dorms.read' },
+      { label: 'Kampuslar', path: '/staff/campuses', icon: Building2, permission: 'campuses.read' },
+      { label: 'Fayllar', path: '/staff/files', icon: FolderOpen, permission: 'files.read' },
     ],
   },
 ];
@@ -101,11 +102,24 @@ export function StaffSidebar() {
   const { theme, toggleTheme } = useTheme();
 
   const staffUser = user as StaffUser | null;
+  const userPermissions = staffUser?.permissions || [];
+
+  const hasPermission = (perm?: string) => {
+    if (!perm) return true;
+    return userPermissions.includes(perm) || userPermissions.includes('admin');
+  };
+
+  const filteredNavGroups = navGroups.map(item => {
+    const filteredChildren = item.children?.filter(child => hasPermission(child.permission));
+    
+    if (item.path && !hasPermission(item.permission)) return null;
+    if (item.children && filteredChildren?.length === 0) return null;
+
+    return { ...item, children: filteredChildren };
+  }).filter(Boolean) as NavItem[];
 
   const toggleGroup = (label: string) => {
-    setOpenGroups(prev =>
-      prev.includes(label) ? prev.filter(g => g !== label) : [...prev, label]
-    );
+    setOpenGroups(prev => prev.includes(label) ? [] : [label]);
   };
 
   const isActive = (path: string) => location.pathname === path;
@@ -145,7 +159,7 @@ export function StaffSidebar() {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
-          {navGroups.map(item => {
+          {filteredNavGroups.map(item => {
             if (item.path) {
               return (
                 <Link

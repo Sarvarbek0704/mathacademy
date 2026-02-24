@@ -1597,15 +1597,47 @@ export class StudentsService {
         },
       });
 
+      // Get group count
+      const groupCount = await this.prisma.groups.count({
+        where: { tenant_id },
+      });
+
+      // Get counts by track
+      const trackCounts = await this.prisma.students.groupBy({
+        by: ['track_id'],
+        where: {
+          tenant_id,
+          archived_at: null,
+          status: 'ACTIVE',
+        },
+        _count: { _all: true },
+      });
+
+      const trackIds = trackCounts
+        .map((x) => x.track_id)
+        .filter((x): x is bigint => x !== null);
+
+      const tracks = await this.prisma.student_tracks.findMany({
+        where: { id: { in: trackIds } },
+        select: { id: true, name: true },
+      });
+
+      const trackMap = new Map(tracks.map((x) => [x.id, x.name]));
+
       return {
-        statusDistribution: statusCounts.reduce((acc, curr) => {
-          acc[curr.status] = curr._count.status;
-          return acc;
-        }, {}),
-        gradeDistribution: gradeCounts.reduce((acc, curr) => {
-          acc[curr.admission_grade] = curr._count.admission_grade;
-          return acc;
-        }, {}),
+        byStatus: statusCounts.map((s) => ({
+          status: s.status,
+          count: s._count.status,
+        })),
+        byAdmissionGrade: gradeCounts.map((g) => ({
+          grade: g.admission_grade,
+          count: g._count.admission_grade,
+        })),
+        byTrack: trackCounts.map((t) => ({
+          trackId: t.track_id?.toString(),
+          trackName: t.track_id ? trackMap.get(t.track_id) : 'Not Assigned',
+          count: t._count._all,
+        })),
         livingTypeDistribution: livingTypeCounts.reduce(
           (acc, curr) => {
             const id = curr.living_type_id;
@@ -1634,6 +1666,7 @@ export class StudentsService {
         },
         totalActive:
           statusCounts.find((s) => s.status === 'ACTIVE')?._count.status || 0,
+        groupCount: groupCount.toString(),
         totalArchived: await this.prisma.students.count({
           where: {
             tenant_id,
@@ -1742,5 +1775,36 @@ export class StudentsService {
     } catch (e) {
       prismaErrorToHttp(e);
     }
+  }
+
+  async getRegistrationTrend(tenantId: string) {
+    const tenant_id = toBigInt(tenantId, 'tenantId');
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const rows = await this.prisma.students.findMany({
+      where: {
+        tenant_id,
+        created_at: { gte: thirtyDaysAgo },
+      },
+      select: { created_at: true },
+    });
+
+    const dailyCounts: Record<string, number> = {};
+    for (let i = 0; i < 30; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().split('T')[0];
+      dailyCounts[key] = 0;
+    }
+
+    rows.forEach((r) => {
+      const key = r.created_at.toISOString().split('T')[0];
+      if (dailyCounts[key] !== undefined) dailyCounts[key]++;
+    });
+
+    return Object.entries(dailyCounts)
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 }

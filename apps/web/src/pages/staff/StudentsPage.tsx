@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { DataTable, type Column } from '@/components/shared/DataTable';
-import { FormModal } from '@/components/shared/FormModal';
+import { SlideOver } from '@/components/shared/SlideOver';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useCrud } from '@/hooks/useCrud';
@@ -18,7 +18,22 @@ export default function StudentsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [deleting, setDeleting] = useState<any>(null);
-  const [form, setForm] = useState({ firstName: '', lastName: '', studentId: '', grade: '10', status: 'ACTIVE', phoneGuardian: '' });
+
+  const initialForm = {
+    fullName: '',
+    gender: 'MALE',
+    birthDate: '',
+    admissionGrade: '10',
+    admissionDate: new Date().toISOString().split('T')[0],
+    expectedGraduationYear: new Date().getFullYear() + 2,
+    livingTypeCode: 'DAY_ONLY',
+    guardianFullName: '',
+    guardianPhone: '',
+    guardianRelation: 'FATHER',
+    status: 'ACTIVE'
+  };
+
+  const [form, setForm] = useState<any>(initialForm);
 
   const columns: Column<any>[] = [
     {
@@ -45,28 +60,39 @@ export default function StudentsPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ firstName: '', lastName: '', studentId: '', grade: '10', status: 'ACTIVE', phoneGuardian: '' });
+    setForm(initialForm);
     setModalOpen(true);
   };
 
   const openEdit = (item: any) => {
     setEditing(item);
     setForm({
-      firstName: item.firstName || item.first_name || '',
-      lastName: item.lastName || item.last_name || '',
-      studentId: item.studentId || item.student_id || '',
-      grade: String(item.grade || '10'),
+      fullName: item.fullName || item.full_name || `${item.firstName || ''} ${item.lastName || ''}`.trim() || '',
+      gender: item.gender || 'MALE',
+      birthDate: item.birthDate ? new Date(item.birthDate).toISOString().split('T')[0] : '',
+      admissionGrade: String(item.admissionGrade || item.grade || '10'),
+      admissionDate: item.admissionDate ? new Date(item.admissionDate).toISOString().split('T')[0] : '',
+      expectedGraduationYear: item.expectedGraduationYear || (new Date().getFullYear() + 2),
+      livingTypeCode: item.livingTypeCode || item.living_type_code || 'DAY_ONLY',
+      guardianFullName: item.guardianFullName || item.guardian_full_name || '',
+      guardianPhone: item.guardianPhone || item.guardian_phone || '',
+      guardianRelation: item.guardianRelation || item.guardian_relation || 'FATHER',
       status: item.status || 'ACTIVE',
-      phoneGuardian: item.phoneGuardian || item.phone_guardian || '',
     });
     setModalOpen(true);
   };
 
   const handleSubmit = async () => {
+    const payload = {
+      ...form,
+      admissionGrade: parseInt(form.admissionGrade, 10),
+      expectedGraduationYear: parseInt(form.expectedGraduationYear, 10),
+    };
+
     if (editing) {
-      await update(editing.id, form);
+      await update(editing.id, payload);
     } else {
-      await create(form);
+      await create(payload);
     }
     setModalOpen(false);
   };
@@ -104,54 +130,121 @@ export default function StudentsPage() {
         )}
       />
 
-      <FormModal open={modalOpen} onOpenChange={setModalOpen}
+      <SlideOver open={modalOpen} onOpenChange={setModalOpen}
         title={editing ? "O'quvchini tahrirlash" : "Yangi o'quvchi qo'shish"}
-        description="Barcha maydonlarni to'ldiring">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Ism</Label>
-            <Input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} />
+        description="Barcha majburiy maydonlarni to'ldiring" size="lg">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium border-b pb-2">O'quvchi ma'lumotlari</h3>
+            
+            <div className="space-y-2">
+              <Label>F.I.Sh</Label>
+              <Input value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} placeholder="Ism va Familiya" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Jinsi</Label>
+                <Select value={form.gender} onValueChange={v => setForm({ ...form, gender: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MALE">Erkak</SelectItem>
+                    <SelectItem value="FEMALE">Ayol</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Tug'ilgan sana</Label>
+                <Input type="date" value={form.birthDate} onChange={e => setForm({ ...form, birthDate: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Qabul sinfi</Label>
+                <Select value={form.admissionGrade} onValueChange={v => setForm({ ...form, admissionGrade: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="8">8-sinf</SelectItem>
+                    <SelectItem value="9">9-sinf</SelectItem>
+                    <SelectItem value="10">10-sinf</SelectItem>
+                    <SelectItem value="11">11-sinf</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Bitiruv yili</Label>
+                <Input type="number" value={form.expectedGraduationYear} onChange={e => setForm({ ...form, expectedGraduationYear: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Qabul sanasi</Label>
+                <Input type="date" value={form.admissionDate} onChange={e => setForm({ ...form, admissionDate: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Yashash turi</Label>
+                <Select value={form.livingTypeCode} onValueChange={v => setForm({ ...form, livingTypeCode: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DAY_ONLY">Faqat kunduzgi</SelectItem>
+                    <SelectItem value="WEEKDAYS_ONLY">5 kunlik yotoqxona</SelectItem>
+                    <SelectItem value="FULL_BOARD">To'liq yotoqxona (7 kun)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {editing && (
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">Faol</SelectItem>
+                    <SelectItem value="GRADUATED">Bitirgan</SelectItem>
+                    <SelectItem value="EXPELLED">Chetlatilgan</SelectItem>
+                    <SelectItem value="WITHDRAWN">Chiqib ketgan</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label>Familiya</Label>
-            <Input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} />
-          </div>
-          <div className="space-y-2">
-            <Label>O'quvchi ID</Label>
-            <Input value={form.studentId} onChange={e => setForm({ ...form, studentId: e.target.value })} />
-          </div>
-          <div className="space-y-2">
-            <Label>Sinf</Label>
-            <Select value={form.grade} onValueChange={v => setForm({ ...form, grade: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10-sinf</SelectItem>
-                <SelectItem value="11">11-sinf</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ACTIVE">Faol</SelectItem>
-                <SelectItem value="GRADUATED">Bitirgan</SelectItem>
-                <SelectItem value="EXPELLED">Chetlatilgan</SelectItem>
-                <SelectItem value="WITHDRAWN">Chiqib ketgan</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Ota-ona telefoni</Label>
-            <Input value={form.phoneGuardian} onChange={e => setForm({ ...form, phoneGuardian: e.target.value })} placeholder="+998..." />
+
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium border-b pb-2">Ota-ona ma'lumotlari</h3>
+            
+            <div className="space-y-2">
+              <Label>Aloqadorligi</Label>
+              <Select value={form.guardianRelation} onValueChange={v => setForm({ ...form, guardianRelation: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FATHER">Ota</SelectItem>
+                  <SelectItem value="MOTHER">Ona</SelectItem>
+                  <SelectItem value="GUARDIAN">Vasiy</SelectItem>
+                  <SelectItem value="OTHER">Boshqa</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Ota-ona (Vasiy) F.I.Sh</Label>
+              <Input value={form.guardianFullName} onChange={e => setForm({ ...form, guardianFullName: e.target.value })} placeholder="Vasiyning ism-familiyasi" />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Telefon raqami</Label>
+              <Input value={form.guardianPhone} onChange={e => setForm({ ...form, guardianPhone: e.target.value })} placeholder="+998901234567" />
+            </div>
           </div>
         </div>
-        <div className="flex justify-end gap-2 mt-4">
-          <Button variant="outline" onClick={() => setModalOpen(false)}>Bekor qilish</Button>
-          <Button onClick={handleSubmit}>{editing ? 'Saqlash' : 'Yaratish'}</Button>
+        
+        <div className="flex flex-col-reverse justify-end gap-2 mt-8 sm:flex-row">
+          <Button variant="outline" className="w-full sm:w-auto" onClick={() => setModalOpen(false)}>Bekor qilish</Button>
+          <Button className="w-full sm:w-auto" onClick={handleSubmit}>{editing ? 'Saqlash' : 'Yaratish'}</Button>
         </div>
-      </FormModal>
+      </SlideOver>
 
       <ConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen}
         title="O'quvchini o'chirish" description={`"${deleting?.firstName || ''} ${deleting?.lastName || ''}" ni o'chirishga ishonchingiz komilmi?`}

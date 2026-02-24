@@ -212,6 +212,13 @@ export class DisciplineController {
       ipAddress: this.ip(req),
     });
   }
+
+  @Get('summary')
+  @RequirePermissions('discipline.read')
+  @ApiOperation({ summary: 'Get discipline summary for dashboard' })
+  getSummary(@Req() req: any) {
+    return this.svc.getDisciplineSummary(this.tenantId(req));
+  }
 }
 
 @ApiTags('Guardian - Discipline')

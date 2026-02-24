@@ -78,6 +78,20 @@ export class EventsController {
     });
   }
 
+  @Get('summary')
+  @RequirePermissions('events.read')
+  @ApiOperation({ summary: 'Get event summary for dashboard' })
+  getSummary(@Req() req: any) {
+    return this.svc.getEventSummary(this.tenantId(req));
+  }
+
+  @Get('summary/upcoming')
+  @RequirePermissions('events.read')
+  @ApiOperation({ summary: 'Get upcoming events for dashboard' })
+  getUpcoming(@Req() req: any) {
+    return this.svc.getUpcomingEvents(this.tenantId(req));
+  }
+
   @Get(':id')
   @RequirePermissions('events.read')
   @ApiOperation({ summary: 'Get event details' })
@@ -183,9 +197,9 @@ export class EventsController {
       eventId: id.toString(),
       userId: this.userId(req),
       studentIds: ids,
-      ipAddress: this.ip(req),
     });
   }
+
 }
 
 @ApiTags('Guardian - Events')

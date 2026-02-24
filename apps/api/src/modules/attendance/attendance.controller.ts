@@ -118,6 +118,15 @@ export class AttendanceController {
       to,
     });
   }
+
+  @RequirePermissions('attendance.read')
+  @Get('stats')
+  @ApiOperation({ summary: 'Get overall attendance statistics for dashboard' })
+  getOverallStats(@Req() req: any) {
+    return this.attendance.getOverallStats({
+      tenantId: this.tenantId(req),
+    });
+  }
 }
 
 @ApiTags('Guardian - Attendance')

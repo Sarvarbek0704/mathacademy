@@ -351,7 +351,6 @@ export class StudentsController {
     });
   }
 
-  // ==================== GET STUDENT STATISTICS ====================
   @RequirePermissions('students.read')
   @Get('statistics/summary')
   @ApiOperation({
@@ -367,6 +366,15 @@ export class StudentsController {
     return this.studentsService.getStatistics({
       tenantId: String(req.user?.tenantId || ''),
     });
+  }
+
+  @RequirePermissions('students.read')
+  @Get('summary/registrations')
+  @ApiOperation({ summary: 'Get student registration trend for dashboard' })
+  getRegistrationTrend(@Req() req: any) {
+    return this.studentsService.getRegistrationTrend(
+      String(req.user?.tenantId || ''),
+    );
   }
 
   // ==================== GET STUDENT TIMELINE ====================

@@ -409,4 +409,44 @@ export class UsersService {
       rethrowServiceError(error);
     }
   }
+
+  async getStaffCount(tenantId: string) {
+    const tenant_id = toBigInt(tenantId, 'tenantId');
+    const count = await this.prisma.users.count({
+      where: {
+        tenant_id,
+        is_active: true,
+      },
+    });
+    return { count };
+  }
+
+  async getTeacherWorkload(tenantId: string) {
+    const tenant_id = toBigInt(tenantId, 'tenantId');
+    const teachers = await this.prisma.users.findMany({
+      where: {
+        tenant_id,
+        is_active: true,
+        // Assuming staff/teachers are identified by some other means if 'type' is missing
+        // or just list all active staff users in the tenant.
+      },
+      select: {
+        id: true,
+        full_name: true,
+        _count: {
+          select: {
+            timetable_lessons: true,
+          },
+        },
+      },
+    });
+
+    return teachers
+      .map((t) => ({
+        name: t.full_name,
+        lessons: t._count.timetable_lessons,
+      }))
+      .sort((a, b) => b.lessons - a.lessons)
+      .slice(0, 10);
+  }
 }

@@ -72,6 +72,18 @@ export class UsersController {
     });
   }
 
+  @Get('summary/count')
+  @ApiOperation({ summary: 'Get total staff count' })
+  getStaffCount(@Req() req: any) {
+    return this.usersService.getStaffCount(this.tenantId(req));
+  }
+
+  @Get('summary/workload')
+  @ApiOperation({ summary: 'Get teacher workload for dashboard' })
+  getWorkload(@Req() req: any) {
+    return this.usersService.getTeacherWorkload(this.tenantId(req));
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get user details' })
   @ApiParam({ name: 'id', description: 'User ID' })
@@ -127,4 +139,5 @@ export class UsersController {
       ipAddress: this.ip(req),
     });
   }
+
 }

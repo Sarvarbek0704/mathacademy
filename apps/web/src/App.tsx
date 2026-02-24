@@ -25,8 +25,25 @@ import DisciplineActionsPage from "./pages/staff/DisciplineActionsPage";
 import LeavesPage from "./pages/staff/LeavesPage";
 import PaymentsPage from "./pages/staff/PaymentsPage";
 import InvoicesPage from "./pages/staff/InvoicesPage";
+import RolesPage from "./pages/staff/RolesPage";
+import TimetablePage from "./pages/staff/TimetablePage";
+import StaffAnnouncementsPage from "./pages/staff/StaffAnnouncementsPage";
+import AwardsPage from "./pages/staff/AwardsPage";
 import SimpleCrudPage from "./pages/staff/SimpleCrudPage";
-
+import MealBillingPage from "./pages/staff/MealBillingPage";
+import DormBillingPage from "./pages/staff/DormBillingPage";
+import DisplaysPage from "./pages/staff/DisplaysPage";
+import CertificatesPage from "./pages/staff/CertificatesPage";
+import CompetitionsPage from "./pages/staff/CompetitionsPage";
+import TracksPage from "./pages/staff/TracksPage";
+import CohortsPage from "./pages/staff/CohortsPage";
+import SubjectsPage from "./pages/staff/SubjectsPage";
+import CampusesPage from "./pages/staff/CampusesPage";
+import NotificationsPage from "./pages/staff/NotificationsPage";
+import ReportsPage from "./pages/staff/ReportsPage";
+import EventsPage from "./pages/staff/EventsPage";
+import DormsPage from "./pages/staff/DormsPage";
+import MediaCenterPage from "./pages/staff/MediaCenterPage";
 import GuardianDashboard from "./pages/guardian/GuardianDashboard";
 import GuardianStudent from "./pages/guardian/GuardianStudent";
 import GuardianGrades from "./pages/guardian/GuardianGrades";
@@ -36,6 +53,8 @@ import GuardianBilling from "./pages/guardian/GuardianBilling";
 import GuardianEvents from "./pages/guardian/GuardianEvents";
 import GuardianNotifications from "./pages/guardian/GuardianNotifications";
 import GuardianCertificates from "./pages/guardian/GuardianCertificates";
+import GuardianTimetable from "./pages/guardian/GuardianTimetable";
+import GuardianAnnouncements from "./pages/guardian/GuardianAnnouncements";
 
 import NotFound from "./pages/NotFound";
 
@@ -69,23 +88,24 @@ const App = () => (
                 <Route path="leaves" element={<LeavesPage />} />
                 <Route path="payments" element={<PaymentsPage />} />
                 <Route path="invoices" element={<InvoicesPage />} />
-                <Route path="tracks" element={<SimpleCrudPage endpoint="/staff/tracks" title="Yo'nalishlar" description="O'quvchi yo'nalishlari" fields={[{ key: 'name', label: 'Nomi' }, { key: 'description', label: 'Tavsif' }]} />} />
-                <Route path="cohorts" element={<SimpleCrudPage endpoint="/staff/cohorts" title="Kohortalar" description="Bitiruvchilar guruhi" fields={[{ key: 'name', label: 'Nomi' }, { key: 'year', label: 'Yil' }]} />} />
-                <Route path="subjects" element={<SimpleCrudPage endpoint="/staff/subjects" title="Fanlar" description="O'quv fanlari" fields={[{ key: 'name', label: 'Nomi' }, { key: 'code', label: 'Kodi' }]} />} />
-                <Route path="timetable" element={<SimpleCrudPage endpoint="/staff/timetable" title="Dars jadvali" description="Haftalik dars jadvali" fields={[{ key: 'weekday', label: 'Kun' }, { key: 'startTime', label: 'Boshlanish' }, { key: 'endTime', label: 'Tugash' }]} />} />
-                <Route path="events" element={<SimpleCrudPage endpoint="/staff/events" title="Tadbirlar" description="Akademiya tadbirlari" fields={[{ key: 'title', label: 'Nomi' }, { key: 'type', label: 'Turi' }, { key: 'date', label: 'Sana', type: 'date' }, { key: 'description', label: 'Tavsif', type: 'textarea' }]} />} />
-                <Route path="competitions" element={<SimpleCrudPage endpoint="/staff/competitions" title="Musobaqalar" description="Musobaqalar boshqaruvi" fields={[{ key: 'name', label: 'Nomi' }, { key: 'mode', label: 'Rejim' }, { key: 'rules', label: 'Qoidalar', type: 'textarea' }]} />} />
-                <Route path="awards" element={<SimpleCrudPage endpoint="/staff/awards" title="Mukofotlar" description="O'quvchi mukofotlari" fields={[{ key: 'type', label: 'Turi' }, { key: 'description', label: 'Tavsif' }]} />} />
-                <Route path="certificates" element={<SimpleCrudPage endpoint="/staff/certificates" title="Sertifikatlar" description="IELTS, SAT sertifikatlar" fields={[{ key: 'type', label: 'Turi' }, { key: 'name', label: 'Nomi' }, { key: 'score', label: 'Ball' }]} />} />
-                <Route path="roles" element={<SimpleCrudPage endpoint="/staff/rbac/roles" title="Rollar" description="Foydalanuvchi rollari" fields={[{ key: 'name', label: 'Nomi' }, { key: 'description', label: 'Tavsif' }]} />} />
-                <Route path="announcements" element={<SimpleCrudPage endpoint="/staff/announcements" title="E'lonlar" description="Akademiya e'lonlari" fields={[{ key: 'title', label: 'Sarlavha' }, { key: 'content', label: 'Matn', type: 'textarea' }]} />} />
-                <Route path="notifications" element={<SimpleCrudPage endpoint="/staff/notifications/templates" title="Bildirishnomalar" description="Xabar shablonlari" fields={[{ key: 'eventCode', label: 'Event kodi' }, { key: 'channel', label: 'Kanal' }, { key: 'template', label: 'Shablon', type: 'textarea' }]} />} />
-                <Route path="displays" element={<SimpleCrudPage endpoint="/staff/displays" title="Monitorlar" description="Info panellar" fields={[{ key: 'name', label: 'Nomi' }, { key: 'location', label: 'Joylashuvi' }]} />} />
-                <Route path="dorms" element={<SimpleCrudPage endpoint="/staff/dorms" title="Yotoqxonalar" description="Yotoqxonalar boshqaruvi" fields={[{ key: 'name', label: 'Nomi' }, { key: 'capacity', label: 'Sig\'imi' }]} />} />
-                <Route path="campuses" element={<SimpleCrudPage endpoint="/campuses" title="Kampuslar" description="Akademiya kampuslari" fields={[{ key: 'name', label: 'Nomi' }, { key: 'address', label: 'Manzil' }]} />} />
-                <Route path="meal-billing" element={<SimpleCrudPage endpoint="/staff/billing/meal-weeks" title="Ovqat billing" description="Haftalik ovqat hisobi" fields={[{ key: 'weekStart', label: 'Hafta boshlanishi', type: 'date' }, { key: 'weekEnd', label: 'Hafta tugashi', type: 'date' }]} />} />
-                <Route path="dorm-billing" element={<SimpleCrudPage endpoint="/staff/billing/dorm-months" title="Yotoqxona billing" description="Oylik yotoqxona hisobi" fields={[{ key: 'month', label: 'Oy' }, { key: 'year', label: 'Yil' }]} />} />
-                <Route path="files" element={<SimpleCrudPage endpoint="/staff/files" title="Fayllar" description="Yuklangan fayllar" fields={[{ key: 'name', label: 'Nomi' }, { key: 'type', label: 'Turi' }]} />} />
+                <Route path="tracks" element={<TracksPage />} />
+                <Route path="cohorts" element={<CohortsPage />} />
+                <Route path="subjects" element={<SubjectsPage />} />
+                <Route path="timetable" element={<TimetablePage />} />
+                <Route path="events" element={<EventsPage />} />
+                <Route path="competitions" element={<CompetitionsPage />} />
+                <Route path="awards" element={<AwardsPage />} />
+                <Route path="certificates" element={<CertificatesPage />} />
+                <Route path="roles" element={<RolesPage />} />
+                <Route path="announcements" element={<StaffAnnouncementsPage />} />
+                <Route path="notifications" element={<NotificationsPage />} />
+                <Route path="displays" element={<DisplaysPage />} />
+                <Route path="dorms" element={<DormsPage />} />
+                <Route path="campuses" element={<CampusesPage />} />
+                <Route path="meal-billing" element={<MealBillingPage />} />
+                <Route path="dorm-billing" element={<DormBillingPage />} />
+                <Route path="reports" element={<ReportsPage />} />
+                <Route path="files" element={<MediaCenterPage />} />
               </Route>
 
               <Route path="/guardian" element={<GuardianLayout />}>
@@ -98,6 +118,8 @@ const App = () => (
                 <Route path="events" element={<GuardianEvents />} />
                 <Route path="notifications" element={<GuardianNotifications />} />
                 <Route path="certificates" element={<GuardianCertificates />} />
+                <Route path="timetable" element={<GuardianTimetable />} />
+                <Route path="announcements" element={<GuardianAnnouncements />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />

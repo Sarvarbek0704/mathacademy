@@ -93,6 +93,15 @@ export class RiskController {
       studentId,
     });
   }
+
+  @Get()
+  @RequirePermissions('risk.read')
+  @ApiOperation({ summary: 'Get overall risk summary for dashboard' })
+  getSummary(@Req() req: any) {
+    return this.svc.getRiskSummary({
+      tenantId: this.tenantId(req),
+    });
+  }
 }
 
 @ApiTags('Guardian - Risk')

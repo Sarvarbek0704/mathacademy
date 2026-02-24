@@ -717,4 +717,85 @@ export class AttendanceService {
       byType: typeStats,
     };
   }
+
+  async getOverallStats(args: { tenantId: string }) {
+    const tenant_id = toBigInt(args.tenantId, 'tenantId');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todaySessions = await this.prisma.attendance_sessions.findMany({
+      where: { tenant_id, session_date: today },
+      select: { id: true },
+    });
+
+    const sessionIds = todaySessions.map((s) => s.id);
+
+    const todayMarks = await this.prisma.attendance_marks.groupBy({
+      by: ['status'],
+      where: { session_id: { in: sessionIds } },
+      _count: { status: true },
+    });
+
+    const todaySummary = {
+      total: 0,
+      present: 0,
+      absent: 0,
+      late: 0,
+    };
+
+    todayMarks.forEach((m) => {
+      const count = m._count.status;
+      todaySummary.total += count;
+      if (m.status === 'PRESENT') todaySummary.present += count;
+      if (m.status === 'ABSENT') todaySummary.absent += count;
+      if (m.status === 'LATE') todaySummary.late += count;
+    });
+
+    // Last 7 days trend
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    const recentSessions = await this.prisma.attendance_sessions.findMany({
+      where: {
+        tenant_id,
+        session_date: { gte: sevenDaysAgo },
+      },
+      select: { id: true, session_date: true },
+      orderBy: { session_date: 'asc' },
+    });
+
+    const recentSessionIds = recentSessions.map((s) => s.id);
+    const recentMarks = await this.prisma.attendance_marks.findMany({
+      where: { session_id: { in: recentSessionIds } },
+      select: { session_id: true, status: true },
+    });
+
+    const dayMap = new Map();
+    const days = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'];
+
+    recentSessions.forEach((s) => {
+      const dateStr = s.session_date.toISOString().split('T')[0];
+      if (!dayMap.has(dateStr)) {
+        dayMap.set(dateStr, {
+          day: days[s.session_date.getDay()],
+          present: 0,
+          absent: 0,
+          late: 0,
+        });
+      }
+      const dayData = dayMap.get(dateStr);
+      const sessionMarks = recentMarks.filter((m) => m.session_id === s.id);
+      sessionMarks.forEach((m) => {
+        if (m.status === 'PRESENT') dayData.present++;
+        else if (m.status === 'ABSENT') dayData.absent++;
+        else if (m.status === 'LATE') dayData.late++;
+      });
+    });
+
+    return {
+      today: todaySummary,
+      weekly: Array.from(dayMap.values()),
+    };
+  }
 }

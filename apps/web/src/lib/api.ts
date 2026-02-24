@@ -52,6 +52,21 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+let isRefreshing = false;
+let failedQueue: { resolve: (value?: unknown) => void; reject: (reason?: any) => void }[] = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+
+  failedQueue = [];
+};
+
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = localStorage.getItem('access_token');
   if (token && config.headers) {
@@ -62,11 +77,58 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 
 api.interceptors.response.use(
   (res) => res,
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
     const status = error.response?.status;
     const msg = getApiErrorMessage(error);
 
-    if (status === 401) {
+    if (status === 401 && originalRequest.url !== '/auth/refresh') {
+      if (isRefreshing) {
+        return new Promise(function (resolve, reject) {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${token}`;
+            }
+            return api(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const { data } = await axios.post(
+          `${API_BASE_URL}/auth/refresh`,
+          {},
+          { withCredentials: true }
+        );
+        const { accessToken } = data;
+        localStorage.setItem('access_token', accessToken);
+
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        }
+
+        processQueue(null, accessToken);
+        return api(originalRequest);
+      } catch (err) {
+        processQueue(err, null);
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('user');
+        const path = window.location.pathname;
+        if (!path.includes('/login')) {
+          window.location.href = path.startsWith('/guardian')
+            ? '/guardian/login'
+            : '/staff/login';
+        }
+        return Promise.reject(err);
+      } finally {
+        isRefreshing = false;
+      }
+    } else if (status === 401 && originalRequest.url === '/auth/refresh') {
       localStorage.removeItem('access_token');
       localStorage.removeItem('user');
       const path = window.location.pathname;
@@ -75,12 +137,16 @@ api.interceptors.response.use(
       }
     } else if (status === 403) {
       toast.error("Ruxsat yo'q", { description: msg });
+    } else if (status === 400) {
+      toast.error("Xato", { description: msg || "So'rovda xatolik bor" });
     } else if (status === 404) {
       toast.error("Topilmadi", { description: msg || "So'ralgan ma'lumot topilmadi" });
     } else if (status && status >= 500) {
       toast.error("Server xatosi", { description: "Iltimos, keyinroq qayta urinib ko'ring" });
-    } else if (!error.response) {
+    } else if (!error.response && error.code !== 'ERR_CANCELED') {
       toast.error("Tarmoq xatosi", { description: "Server bilan aloqa o'rnatib bo'lmadi" });
+    } else if (error.code !== 'ERR_CANCELED') {
+      toast.error("Xatolik", { description: msg || "Noma'lum xato yuz berdi" });
     }
 
     return Promise.reject(error);

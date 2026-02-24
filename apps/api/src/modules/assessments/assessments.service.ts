@@ -887,4 +887,87 @@ export class AssessmentsService {
       })),
     };
   }
+
+  async getPerformanceSummary(tenantId: string) {
+    const tenant_id = toBigInt(tenantId, 'tenantId');
+
+    const scores = await this.prisma.assessment_scores.findMany({
+      where: {
+        assessments: {
+          tenant_id,
+          is_published_to_guardians: true,
+        },
+      },
+      select: {
+        score: true,
+      },
+    });
+
+    if (scores.length === 0) {
+      return {
+        averageScore: 0,
+        gradeDistribution: [
+          { name: 'A', value: 0 },
+          { name: 'B', value: 0 },
+          { name: 'C', value: 0 },
+          { name: 'D', value: 0 },
+          { name: 'F', value: 0 },
+        ],
+      };
+    }
+
+    const totalScore = scores.reduce((sum, s) => sum + Number(s.score), 0);
+    const averageScore = totalScore / scores.length;
+
+    const distribution = {
+      A: 0,
+      B: 0,
+      C: 0,
+      D: 0,
+      F: 0,
+    };
+
+    scores.forEach((s) => {
+      const score = Number(s.score);
+      if (score >= 90) distribution.A++;
+      else if (score >= 80) distribution.B++;
+      else if (score >= 70) distribution.C++;
+      else if (score >= 60) distribution.D++;
+      else distribution.F++;
+    });
+
+    return {
+      averageScore: Math.round(averageScore * 10) / 10,
+      gradeDistribution: Object.entries(distribution).map(([name, value]) => ({
+        name,
+        value,
+      })),
+    };
+  }
+
+  async getUpcomingAssessments(tenantId: string) {
+    const tenant_id = toBigInt(tenantId, 'tenantId');
+    const now = new Date();
+
+    const assessments = await this.prisma.assessments.findMany({
+      where: {
+        tenant_id,
+        held_at: { gte: now },
+      },
+      orderBy: { held_at: 'asc' },
+      take: 5,
+      include: {
+        groups: { select: { name: true } },
+        subjects: { select: { name: true } },
+      },
+    });
+
+    return assessments.map((a) => ({
+      id: a.id.toString(),
+      title: a.title,
+      heldAt: a.held_at,
+      groupName: a.groups.name,
+      subjectName: a.subjects.name,
+    }));
+  }
 }

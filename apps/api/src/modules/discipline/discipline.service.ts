@@ -1084,4 +1084,40 @@ export class DisciplineService {
       rethrowServiceError(error);
     }
   }
+
+  async getDisciplineSummary(tenantId: string) {
+    const tenant_id = toBigInt(tenantId, 'tenantId');
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [violationCount, lastViolations] = await Promise.all([
+      this.prisma.violations.count({
+        where: {
+          tenant_id,
+          detected_at: { gte: thirtyDaysAgo },
+        },
+      }),
+      this.prisma.violations.findMany({
+        where: { tenant_id },
+        take: 5,
+        orderBy: { detected_at: 'desc' },
+        include: {
+          students: { select: { full_name: true } },
+          users: { select: { full_name: true } },
+        },
+      }),
+    ]);
+
+    return {
+      violationCount,
+      lastViolations: lastViolations.map((v) => ({
+        id: v.id.toString(),
+        studentName: v.students.full_name,
+        ruleCode: v.rule_code,
+        severity: v.severity,
+        detectedAt: v.detected_at,
+        recordedBy: v.users?.full_name || 'System',
+      })),
+    };
+  }
 }

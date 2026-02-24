@@ -2,6 +2,15 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { DataTable, type Column } from '@/components/shared/DataTable';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useCrud } from '@/hooks/useCrud';
+import { useState } from 'react';
+import { SlideOver } from '@/components/shared/SlideOver';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { Plus } from 'lucide-react';
 import { StatCard } from '@/components/shared/StatCard';
 import { Receipt, DollarSign, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,17 +23,40 @@ const paymentStats = [
 ];
 
 export default function PaymentsPage() {
-  const { data, loading, total, page, totalPages, setSearch, setPage } = useCrud({ endpoint: '/staff/billing/payments' });
+  const { data, loading, total, page, totalPages, setSearch, setPage, create } = useCrud({ endpoint: '/staff/billing/payments' });
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState({ 
+    invoiceId: '', paidAmount: '0', method: 'CASH', reference: '' 
+  });
+
+  const { data: invoicesRes } = useQuery({
+    queryKey: ['staff', 'billing', 'invoices', 'pending'],
+    queryFn: async () => {
+      const res = await api.get('/staff/billing/invoices?status=PENDING&limit=200');
+      return res.data;
+    }
+  });
+  const invoicesList = invoicesRes?.data || [];
+
+  const methodLabels: Record<string, string> = { 
+    CASH: 'Naqd', CARD: 'Karta', TRANSFER: 'O\'tkazma', OTHER: 'Boshqa' 
+  };
   const columns: Column<any>[] = [
-    { key: 'student', title: "O'quvchi", render: (i) => i.student?.firstName ? `${i.student.firstName} ${i.student.lastName}` : i.studentName || '-' },
-    { key: 'amount', title: 'Summa', render: (i) => <span className="font-bold">{Number(i.amount || 0).toLocaleString()} so'm</span> },
-    { key: 'type', title: 'Turi', render: (i) => i.type || '-' },
+    { key: 'student', title: "O'quvchi", render: (i) => i.invoice?.student?.fullName || i.invoice?.student?.full_name || i.studentName || '-' },
+    { key: 'amount', title: 'Summa', render: (i) => <span className="font-bold">{Number(i.amount || i.paidAmount || 0).toLocaleString()} so'm</span> },
+    { key: 'method', title: 'Usul', render: (i) => methodLabels[i.method] || i.method || '-' },
     { key: 'status', title: 'Holat', render: (i) => <StatusBadge status={i.status || 'PAID'} /> },
-    { key: 'date', title: 'Sana', render: (i) => i.createdAt ? new Date(i.createdAt).toLocaleDateString('uz') : '-' },
+    { key: 'date', title: 'Sana', render: (i) => (i.createdAt || i.created_at) ? new Date(i.createdAt || i.created_at).toLocaleDateString('uz') : '-' },
   ];
   return (
     <div className="space-y-6">
-      <PageHeader title="To'lovlar" description="Barcha to'lovlar tarixi" />
+      <PageHeader title="To'lovlar" description="Barcha to'lovlar tarixi" action={{ 
+        label: "To'lovni qayd etish", 
+        onClick: () => {
+          setForm({ invoiceId: '', paidAmount: '0', method: 'CASH', reference: '' });
+          setModalOpen(true);
+        }
+      }} />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title="Jami to'lovlar" value="₿ 125M" icon={<DollarSign className="h-5 w-5" />} color="success" />
         <StatCard title="Kutilayotgan" value="₿ 18M" icon={<Receipt className="h-5 w-5" />} color="warning" />
@@ -45,6 +77,58 @@ export default function PaymentsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <SlideOver open={modalOpen} onOpenChange={setModalOpen} title="To'lovni qayd etish" size="sm">
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <Label>Hisob-faktura (Invoice)</Label>
+            <Select value={form.invoiceId} onValueChange={v => {
+              const selectedInv = invoicesList.find((inv: any) => String(inv.id) === v);
+              setForm({ ...form, invoiceId: v, paidAmount: selectedInv ? String(selectedInv.amount) : '0' });
+            }}>
+              <SelectTrigger><SelectValue placeholder="Hisobni tanlang" /></SelectTrigger>
+              <SelectContent>
+                {invoicesList.map((inv: any) => (
+                  <SelectItem key={inv.id} value={String(inv.id)}>
+                    {inv.student?.fullName || inv.student?.full_name} - {Number(inv.amount).toLocaleString()} so'm
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>To'lov summasi</Label>
+            <Input type="number" value={form.paidAmount} onChange={e => setForm({ ...form, paidAmount: e.target.value })} />
+          </div>
+          <div className="space-y-2">
+            <Label>To'lov usuli</Label>
+            <Select value={form.method} onValueChange={v => setForm({ ...form, method: v as any })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(methodLabels).map(([val, label]) => (
+                  <SelectItem key={val} value={val}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Kvitansiya / Tranzaksiya raqami (Ixtiyoriy)</Label>
+            <Input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} placeholder="TRX-123456" />
+          </div>
+        </div>
+        <div className="flex flex-col-reverse justify-end gap-2 mt-8 sm:flex-row">
+          <Button variant="outline" className="w-full sm:w-auto" onClick={() => setModalOpen(false)}>Bekor qilish</Button>
+          <Button className="w-full sm:w-auto" onClick={async () => { 
+            const payload = {
+              ...form,
+              paidAmount: parseFloat(form.paidAmount),
+              source: 'MANUAL',
+            };
+            await create(payload); 
+            setModalOpen(false); 
+          }}>Saqlash</Button>
+        </div>
+      </SlideOver>
     </div>
   );
 }

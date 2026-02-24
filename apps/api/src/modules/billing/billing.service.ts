@@ -1376,4 +1376,111 @@ export class BillingService {
       })),
     };
   }
+
+  async getBillingSummary(tenantId: string) {
+    const tenant_id = toBigInt(tenantId, 'tenantId');
+
+    const [unpaidCount, unpaidTotal] = await this.prisma.$transaction([
+      this.prisma.invoices.count({
+        where: {
+          tenant_id,
+          status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+        },
+      }),
+      this.prisma.invoices.aggregate({
+        where: {
+          tenant_id,
+          status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    // Revenue trend (last 6 months)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+    sixMonthsAgo.setDate(1);
+    sixMonthsAgo.setHours(0, 0, 0, 0);
+
+    const payments = await this.prisma.payments.findMany({
+      where: {
+        tenant_id,
+        paid_at: { gte: sixMonthsAgo },
+      },
+      include: {
+        invoices: {
+          select: { type: true },
+        },
+      },
+    });
+
+    const monthMap = new Map();
+    const months = [
+      'Yan',
+      'Fev',
+      'Mar',
+      'Apr',
+      'May',
+      'Iyun',
+      'Iyul',
+      'Avg',
+      'Sen',
+      'Okt',
+      'Noy',
+      'Dek',
+    ];
+
+    for (let i = 0; i < 6; i++) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const key = monthKey(d);
+      monthMap.set(key, {
+        month: months[d.getMonth()],
+        kurs: 0,
+        ovqat: 0,
+        yotoq: 0,
+      });
+    }
+
+    payments.forEach((p) => {
+      const key = monthKey(p.paid_at);
+      if (monthMap.has(key)) {
+        const data = monthMap.get(key);
+        const amount = Number(p.paid_amount) / 1000;
+        if (p.invoices.type === 'COURSE') data.kurs += amount;
+        else if (p.invoices.type === 'MEAL') data.ovqat += amount;
+        else if (p.invoices.type === 'DORM') data.yotoq += amount;
+      }
+    });
+
+    return {
+      unpaidCount,
+      unpaidTotal: unpaidTotal._sum.amount?.toString() || '0',
+      revenueTrend: Array.from(monthMap.values()).reverse(),
+    };
+  }
+
+  async getPendingPayments(tenantId: string) {
+    const tenant_id = toBigInt(tenantId, 'tenantId');
+
+    const invoices = await this.prisma.invoices.findMany({
+      where: {
+        tenant_id,
+        status: 'PENDING',
+      },
+      orderBy: { amount: 'desc' },
+      take: 5,
+      include: {
+        students: { select: { full_name: true } },
+      },
+    });
+
+    return invoices.map((inv) => ({
+      id: inv.id.toString(),
+      studentName: inv.students.full_name,
+      amount: Number(inv.amount),
+      type: inv.type,
+      dueDate: inv.due_date,
+    }));
+  }
 }

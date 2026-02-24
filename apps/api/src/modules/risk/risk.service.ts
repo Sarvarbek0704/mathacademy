@@ -307,4 +307,35 @@ export class RiskService {
       rethrowServiceError(error);
     }
   }
+
+  async getRiskSummary(args: { tenantId: string }) {
+    try {
+      const tenant_id = toBigInt(args.tenantId, 'tenantId');
+
+      const students = await this.prisma.students.findMany({
+        where: { tenant_id, status: 'ACTIVE', archived_at: null },
+        select: {
+          id: true,
+          student_risk_scores: {
+            orderBy: { calculated_at: 'desc' },
+            take: 1,
+            select: { level: true },
+          },
+        },
+      });
+
+      const summary = { low: 0, medium: 0, high: 0 };
+
+      students.forEach((s) => {
+        const level = s.student_risk_scores[0]?.level || 'GREEN';
+        if (level === 'RED') summary.high++;
+        else if (level === 'YELLOW') summary.medium++;
+        else summary.low++;
+      });
+
+      return { summary };
+    } catch (error) {
+      rethrowServiceError(error);
+    }
+  }
 }

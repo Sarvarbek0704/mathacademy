@@ -197,4 +197,18 @@ export class StaffBillingController {
   listPayments(@Req() req: any, @Query() q: ListPaymentsQueryDto) {
     return this.service.listPayments(this.tenantId(req), q);
   }
+
+  @Get('summary')
+  @RequirePermissions('billing.read')
+  @ApiOperation({ summary: 'Get billing summary for dashboard' })
+  getSummary(@Req() req: any) {
+    return this.service.getBillingSummary(this.tenantId(req));
+  }
+
+  @Get('summary/pending-payments')
+  @RequirePermissions('billing.read')
+  @ApiOperation({ summary: 'Get top 5 pending payments for dashboard' })
+  getPendingPayments(@Req() req: any) {
+    return this.service.getPendingPayments(this.tenantId(req));
+  }
 }

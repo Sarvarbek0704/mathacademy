@@ -136,6 +136,20 @@ export class AssessmentsController {
     });
   }
 
+  @Get('summary')
+  @RequirePermissions('assessments.read')
+  @ApiOperation({ summary: 'Get assessment performance summary for dashboard' })
+  getSummary(@Req() req: any) {
+    return this.svc.getPerformanceSummary(this.tenantId(req));
+  }
+
+  @Get('summary/upcoming')
+  @RequirePermissions('assessments.read')
+  @ApiOperation({ summary: 'Get upcoming assessments for dashboard' })
+  getUpcoming(@Req() req: any) {
+    return this.svc.getUpcomingAssessments(this.tenantId(req));
+  }
+
   @Get(':id')
   @RequirePermissions('assessments.read')
   @ApiOperation({
@@ -220,9 +234,9 @@ export class AssessmentsController {
       assessmentId: id.toString(),
       actorUserId: this.userId(req),
       publish,
-      ipAddress: this.ip(req),
     });
   }
+
 }
 
 @ApiTags('Guardian - Grades')

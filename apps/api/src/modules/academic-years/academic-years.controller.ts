@@ -36,7 +36,7 @@ import { AcademicYearStatsQuery } from './dto/academic-year-stats.query.dto';
 @ApiTags('Academic Years')
 @ApiBearerAuth('access-token')
 @UseGuards(AccessGuard, PermissionsGuard)
-@Controller('academic-years')
+@Controller('staff/academic-years')
 export class AcademicYearsController {
   constructor(private readonly svc: AcademicYearsService) {}
 

@@ -9,6 +9,7 @@ interface StatCardProps {
   description?: string;
   trend?: { value: number; label: string };
   color?: 'primary' | 'accent' | 'warning' | 'destructive' | 'info' | 'success';
+  onClick?: () => void;
 }
 
 const colorMap = {
@@ -20,9 +21,15 @@ const colorMap = {
   success: 'bg-success/10 text-success',
 };
 
-export function StatCard({ title, value, icon, description, trend, color = 'primary' }: StatCardProps) {
+export function StatCard({ title, value, icon, description, trend, color = 'primary', onClick }: StatCardProps) {
   return (
-    <Card className="stat-card animate-fade-in">
+    <Card 
+      className={cn(
+        "stat-card animate-fade-in transition-all duration-200", 
+        onClick && "cursor-pointer hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+      )}
+      onClick={onClick}
+    >
       <CardContent className="p-0">
         <div className="flex items-start justify-between">
           <div className="space-y-1">

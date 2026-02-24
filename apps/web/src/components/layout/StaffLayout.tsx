@@ -1,6 +1,7 @@
 import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { StaffSidebar } from './StaffSidebar';
+import { Breadcrumbs } from '../shared/Breadcrumbs';
 import { Loader2 } from 'lucide-react';
 
 export function StaffLayout() {
@@ -23,6 +24,7 @@ export function StaffLayout() {
       <StaffSidebar />
       <main className="flex-1 overflow-y-auto bg-background">
         <div className="p-6 max-w-[1440px] mx-auto">
+          <Breadcrumbs />
           <Outlet />
         </div>
       </main>
