@@ -104,8 +104,9 @@ export default function AssessmentsPage() {
   });
   const selectedGroup = selectedGroupRes?.data || selectedGroupRes;
 
-  // Use all available subjects (group-subject relationship is not strict)
-  const availableSubjects = subjectsList;
+  // Use group-specific subjects when a group is selected
+  const groupSubjects = selectedGroup?.subjects || [];
+  const availableSubjects = groupSubjects.length > 0 ? groupSubjects : subjectsList;
 
   // Fetch Assessment details (including scores)
   const { data: detail, isLoading: loadingDetail } = useQuery<AssessmentDetail>({
@@ -509,18 +510,28 @@ export default function AssessmentsPage() {
           </div>
           <div className="space-y-2">
             <Label>Turi</Label>
-            <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
+            <Select
+              value={form.type}
+              onValueChange={(v) =>
+                setForm({ ...form, type: v, maxScore: v === 'BLOCK_TEST' ? '189' : form.maxScore })
+              }
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="WEEKLY_TEST">Haftalik test</SelectItem>
-                <SelectItem value="BLOCK_TEST">Blok test</SelectItem>
+                <SelectItem value="BLOCK_TEST">Blok test (DTM — 189 ball)</SelectItem>
                 <SelectItem value="WRITTEN">Yozma</SelectItem>
                 <SelectItem value="CONTROL">Nazorat</SelectItem>
                 <SelectItem value="MOCK">Sinov</SelectItem>
               </SelectContent>
             </Select>
+            {form.type === 'BLOCK_TEST' && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">
+                DTM: Asosiy 93 + Qo'shimcha 63 + Majburiy 3×11 = 189 ball
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>O'tkazilgan vaqt</Label>
