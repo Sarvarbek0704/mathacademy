@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -12,36 +12,48 @@ export function useCrud<T = any>({ endpoint, queryParams = {}, autoFetch = true 
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [page, setPageState] = useState(1);
   const [search, setSearch] = useState('');
   const limit = 20;
+
+  // Stable ref to avoid stale closure issues with queryParams
+  const queryParamsRef = useRef(queryParams);
+  useEffect(() => {
+    queryParamsRef.current = queryParams;
+  });
 
   const fetchData = useCallback(async (p?: number) => {
     setLoading(true);
     try {
+      const currentPage = p ?? page;
       const res = await api.get(endpoint, {
-        params: { page: p || page, limit, search: search || undefined, ...queryParams },
+        params: {
+          page: currentPage,
+          limit,
+          search: search || undefined,
+          ...queryParamsRef.current,
+        },
       });
       const result = res.data;
       if (Array.isArray(result)) {
         setData(result);
         setTotal(result.length);
-      } else if (result.data) {
+      } else if (result?.data) {
         setData(result.data);
-        setTotal(result.total || result.meta?.total || result.data.length);
-      } else if (result.items) {
+        setTotal(result.total ?? result.meta?.total ?? result.data.length);
+      } else if (result?.items) {
         setData(result.items);
-        setTotal(result.total || result.items.length);
+        setTotal(result.total ?? result.items.length);
       } else {
-        setData(Array.isArray(result) ? result : []);
+        setData([]);
         setTotal(0);
       }
     } catch {
-      // error already handled by interceptor
+      // errors handled by api interceptor
     } finally {
       setLoading(false);
     }
-  }, [endpoint, page, search, JSON.stringify(queryParams)]);
+  }, [endpoint, page, search]); // queryParams handled via ref
 
   useEffect(() => {
     if (autoFetch) fetchData();
@@ -49,14 +61,14 @@ export function useCrud<T = any>({ endpoint, queryParams = {}, autoFetch = true 
 
   const create = async (body: any) => {
     const res = await api.post(endpoint, body);
-    toast.success("Muvaffaqiyatli yaratildi");
+    toast.success('Muvaffaqiyatli yaratildi');
     fetchData();
     return res.data;
   };
 
   const update = async (id: string | number, body: any) => {
     const res = await api.patch(`${endpoint}/${id}`, body);
-    toast.success("Muvaffaqiyatli yangilandi");
+    toast.success('Muvaffaqiyatli yangilandi');
     fetchData();
     return res.data;
   };
@@ -67,16 +79,16 @@ export function useCrud<T = any>({ endpoint, queryParams = {}, autoFetch = true 
     fetchData();
   };
 
-  const changePage = (p: number) => {
-    setPage(p);
-    fetchData(p);
+  // setPage only updates state; useEffect will trigger fetchData automatically
+  const setPage = (p: number) => {
+    setPageState(p);
   };
 
-  const totalPages = Math.ceil(total / limit) || 1;
+  const totalPages = total > 0 ? Math.ceil(total / limit) : 1;
 
   return {
     data, loading, total, page, totalPages, search,
-    setSearch, setPage: changePage, refetch: fetchData,
+    setSearch, setPage, refetch: fetchData,
     create, update, remove,
   };
 }

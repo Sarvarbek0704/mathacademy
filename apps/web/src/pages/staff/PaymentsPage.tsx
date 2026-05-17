@@ -16,11 +16,6 @@ import { Receipt, DollarSign, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
-const paymentStats = [
-  { name: "To'langan", value: 65, color: 'hsl(152,60%,40%)' },
-  { name: "To'lanmagan", value: 25, color: 'hsl(0,72%,51%)' },
-  { name: 'Qisman', value: 10, color: 'hsl(38,92%,50%)' },
-];
 
 export default function PaymentsPage() {
   const { data, loading, total, page, totalPages, setSearch, setPage, create } = useCrud({ endpoint: '/staff/billing/payments' });
@@ -32,11 +27,30 @@ export default function PaymentsPage() {
   const { data: invoicesRes } = useQuery({
     queryKey: ['staff', 'billing', 'invoices', 'pending'],
     queryFn: async () => {
-      const res = await api.get('/staff/billing/invoices?status=PENDING&limit=200');
+      const res = await api.get('/staff/billing/invoices', { params: { status: 'PENDING', limit: 200 } });
       return res.data;
     }
   });
-  const invoicesList = invoicesRes?.data || [];
+  const invoicesList = invoicesRes?.data || invoicesRes?.items || [];
+
+  const { data: billingSummary } = useQuery({
+    queryKey: ['staff', 'billing', 'summary'],
+    queryFn: async () => (await api.get('/staff/billing/summary')).data,
+  });
+
+  const totalCollected = billingSummary?.totalCollected ?? 0;
+  const totalPending = billingSummary?.totalPending ?? 0;
+  const totalOverdue = billingSummary?.totalOverdue ?? 0;
+
+  const paidCount = billingSummary?.paidCount ?? 0;
+  const pendingCount = billingSummary?.pendingCount ?? 0;
+  const partialCount = billingSummary?.partialCount ?? 0;
+  const totalCount = paidCount + pendingCount + partialCount || 1;
+  const paymentStats = [
+    { name: "To'langan", value: Math.round((paidCount / totalCount) * 100), color: 'hsl(152,60%,40%)' },
+    { name: "To'lanmagan", value: Math.round((pendingCount / totalCount) * 100), color: 'hsl(0,72%,51%)' },
+    { name: 'Qisman', value: Math.round((partialCount / totalCount) * 100), color: 'hsl(38,92%,50%)' },
+  ];
 
   const methodLabels: Record<string, string> = { 
     CASH: 'Naqd', CARD: 'Karta', TRANSFER: 'O\'tkazma', OTHER: 'Boshqa' 
@@ -58,9 +72,24 @@ export default function PaymentsPage() {
         }
       }} />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard title="Jami to'lovlar" value="₿ 125M" icon={<DollarSign className="h-5 w-5" />} color="success" />
-        <StatCard title="Kutilayotgan" value="₿ 18M" icon={<Receipt className="h-5 w-5" />} color="warning" />
-        <StatCard title="Muddati o'tgan" value="₿ 5M" icon={<AlertTriangle className="h-5 w-5" />} color="destructive" />
+        <StatCard
+          title="Jami yig'ilgan"
+          value={`${Number(totalCollected).toLocaleString()} so'm`}
+          icon={<DollarSign className="h-5 w-5" />}
+          color="success"
+        />
+        <StatCard
+          title="Kutilayotgan"
+          value={`${Number(totalPending).toLocaleString()} so'm`}
+          icon={<Receipt className="h-5 w-5" />}
+          color="warning"
+        />
+        <StatCard
+          title="Muddati o'tgan"
+          value={`${Number(totalOverdue).toLocaleString()} so'm`}
+          icon={<AlertTriangle className="h-5 w-5" />}
+          color="destructive"
+        />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">

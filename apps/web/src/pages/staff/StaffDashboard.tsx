@@ -243,7 +243,7 @@ export default function StaffDashboard() {
           icon={<Clock className="h-5 w-5" />}
           color="destructive" 
           description="Oxirgi 30 kun ichida"
-          onClick={() => navigate('/staff/discipline')}
+          onClick={() => navigate('/staff/violations')}
         />
       </div>
 

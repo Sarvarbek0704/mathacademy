@@ -77,6 +77,7 @@ const navGroups: NavItem[] = [
       { label: 'Sertifikatlar', path: '/staff/certificates', icon: ScrollText, permission: 'certificates.read' },
     ],
   },
+  { label: 'Hisobotlar', icon: BarChart3, path: '/staff/reports', permission: 'reports.read' },
   {
     label: 'Tizim', icon: Settings,
     children: [
@@ -119,7 +120,9 @@ export function StaffSidebar() {
   }).filter(Boolean) as NavItem[];
 
   const toggleGroup = (label: string) => {
-    setOpenGroups(prev => prev.includes(label) ? [] : [label]);
+    setOpenGroups(prev =>
+      prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]
+    );
   };
 
   const isActive = (path: string) => location.pathname === path;

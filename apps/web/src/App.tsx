@@ -30,7 +30,6 @@ import RolesPage from './pages/staff/RolesPage';
 import TimetablePage from './pages/staff/TimetablePage';
 import StaffAnnouncementsPage from './pages/staff/StaffAnnouncementsPage';
 import AwardsPage from './pages/staff/AwardsPage';
-import SimpleCrudPage from './pages/staff/SimpleCrudPage';
 import MealBillingPage from './pages/staff/MealBillingPage';
 import DormBillingPage from './pages/staff/DormBillingPage';
 import DisplaysPage from './pages/staff/DisplaysPage';
@@ -59,7 +58,15 @@ import GuardianAnnouncements from './pages/guardian/GuardianAnnouncements';
 
 import NotFound from './pages/NotFound';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

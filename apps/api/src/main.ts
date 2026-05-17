@@ -91,10 +91,13 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
+  const isDev = process.env.NODE_ENV !== 'production';
   app.useGlobalPipes(
     new ValidationPipe({
       exceptionFactory: (errors) => {
-        console.error('Validation errors:', JSON.stringify(errors, null, 2));
+        if (isDev) {
+          console.warn('Validation errors:', JSON.stringify(errors, null, 2));
+        }
         return new BadRequestException(errors);
       },
       whitelist: true,

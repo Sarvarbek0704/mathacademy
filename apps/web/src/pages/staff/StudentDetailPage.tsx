@@ -39,56 +39,47 @@ export default function StudentDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!id) {
+      setLoading(false);
+      return;
+    }
     const fetchAllData = async () => {
-      if (!id) return;
+      setLoading(true);
       try {
-        // Main student data
+        // Fetch main student data first (required)
         const res = await api.get(`/staff/students/${id}`);
         const studentData = res.data?.data || res.data;
+        if (!studentData) throw new Error('NOT_FOUND');
         setStudent(studentData);
 
-        // Fetch statistics
-        try {
-          const statsRes = await api.get(`/staff/students/${id}/stats`);
-          setStats(statsRes.data?.data || statsRes.data);
-        } catch (e) {
-          setStats(null);
-        }
+        // Fetch all supplementary data in parallel
+        const [statsRes, attendanceRes, paymentsRes, violationsRes, resultsRes] =
+          await Promise.allSettled([
+            api.get(`/staff/students/${id}/stats`),
+            api.get(`/staff/students/${id}/attendance`),
+            api.get(`/staff/students/${id}/payments`),
+            api.get(`/staff/students/${id}/violations`),
+            api.get(`/staff/students/${id}/assessments`),
+          ]);
 
-        // Fetch attendance data
-        try {
-          const attendanceRes = await api.get(`/staff/students/${id}/attendance`);
-          setAttendance(attendanceRes.data?.data || attendanceRes.data);
-        } catch (e) {
-          setAttendance(null);
+        if (statsRes.status === 'fulfilled') {
+          setStats(statsRes.value.data?.data || statsRes.value.data);
         }
-
-        // Fetch payments
-        try {
-          const paymentsRes = await api.get(`/staff/students/${id}/payments`);
-          const paymentsData = paymentsRes.data?.data || paymentsRes.data?.items || [];
-          setPayments(Array.isArray(paymentsData) ? paymentsData : []);
-        } catch (e) {
-          setPayments([]);
+        if (attendanceRes.status === 'fulfilled') {
+          setAttendance(attendanceRes.value.data?.data || attendanceRes.value.data);
         }
-
-        // Fetch violations/discipline
-        try {
-          const violationsRes = await api.get(`/staff/students/${id}/violations`);
-          const violationsData = violationsRes.data?.data || violationsRes.data?.items || [];
-          setViolations(Array.isArray(violationsData) ? violationsData : []);
-        } catch (e) {
-          setViolations([]);
+        if (paymentsRes.status === 'fulfilled') {
+          const d = paymentsRes.value.data?.data || paymentsRes.value.data?.items || paymentsRes.value.data;
+          setPayments(Array.isArray(d) ? d : []);
         }
-
-        // Fetch results/assessments
-        try {
-          const resultsRes = await api.get(`/staff/students/${id}/assessments`);
-          setResults(resultsRes.data?.data || resultsRes.data);
-        } catch (e) {
-          setResults(null);
+        if (violationsRes.status === 'fulfilled') {
+          const d = violationsRes.value.data?.data || violationsRes.value.data?.items || violationsRes.value.data;
+          setViolations(Array.isArray(d) ? d : []);
         }
-      } catch (error: any) {
+        if (resultsRes.status === 'fulfilled') {
+          setResults(resultsRes.value.data?.data || resultsRes.value.data);
+        }
+      } catch {
         toast.error("O'quvchi ma'lumotlarini yuklashda xatolik");
       } finally {
         setLoading(false);

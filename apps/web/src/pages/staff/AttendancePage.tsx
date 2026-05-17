@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { DataTable, type Column } from '@/components/shared/DataTable';
 import { SlideOver } from '@/components/shared/SlideOver';
@@ -75,16 +75,16 @@ export default function AttendancePage() {
     enabled: !!markingSession,
   });
 
-  // Watch sessionDetail change
-  const [lastSessionId, setLastSessionId] = useState<string | null>(null);
-  if (sessionDetail && sessionDetail.id !== lastSessionId) {
-    const initialMarks: any = {};
+  // Populate marks when session data loads
+  useEffect(() => {
+    if (!sessionDetail) return;
+    const initialMarks: Record<string, { status: string; note: string }> = {};
     sessionDetail.attendance.forEach((a) => {
       initialMarks[a.studentId] = { status: a.status || '', note: a.note || '' };
     });
     setMarks(initialMarks);
-    setLastSessionId(sessionDetail.id);
-  }
+    setSearchStudent('');
+  }, [sessionDetail?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const upsertMarks = useMutation({
     mutationFn: (data: any) => api.post(`/staff/attendance/sessions/${markingSession.id}/marks`, data),
