@@ -28,10 +28,30 @@ import {
 } from '@/components/ui/table';
 import { Pencil, Trash2, Eye, Plus, Loader2, LayoutGrid, LayoutList, Filter } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { toast } from 'sonner';
 import api from '@/lib/api';
+
+function getInitials(fullName?: string, firstName?: string, lastName?: string): string {
+  const name = fullName || `${firstName || ''} ${lastName || ''}`.trim();
+  if (!name) return '?';
+  const parts = name.split(' ').filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return parts[0][0].toUpperCase();
+}
+
+function getDisplayName(student: any): string {
+  return (
+    student.fullName ||
+    student.full_name ||
+    `${student.firstName || student.first_name || ''} ${student.lastName || student.last_name || ''}`.trim() ||
+    '-'
+  );
+}
 
 export default function StudentsPage() {
   const navigate = useNavigate();
+  const [selectedGroup, setSelectedGroup] = useState<string>('all');
+
   const {
     data: students,
     loading,
@@ -44,11 +64,14 @@ export default function StudentsPage() {
     create,
     update,
     remove,
-  } = useCrud({ endpoint: '/staff/students' });
+    refetch,
+  } = useCrud({
+    endpoint: '/staff/students',
+    queryParams: selectedGroup !== 'all' ? { groupId: selectedGroup } : {},
+  });
 
   const [groups, setGroups] = useState<any[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
-  const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -56,15 +79,14 @@ export default function StudentsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
-  // Fetch groups on mount
   useEffect(() => {
     const fetchGroups = async () => {
       try {
         const res = await api.get('/staff/groups');
-        const groupsData = res.data?.data || res.data?.items || [];
+        const groupsData = res.data?.data || res.data?.items || res.data || [];
         setGroups(Array.isArray(groupsData) ? groupsData : []);
-      } catch (error) {
-        console.error('Failed to fetch groups:', error);
+      } catch {
+        // silent — not critical
       } finally {
         setGroupsLoading(false);
       }
@@ -72,15 +94,10 @@ export default function StudentsPage() {
     fetchGroups();
   }, []);
 
-  // Filter students by selected group
-  const filteredStudents =
-    selectedGroup === 'all'
-      ? students
-      : students.filter(
-          (s: any) =>
-            String(s.groupId || s.group_id) === selectedGroup ||
-            String(s.group?.id) === selectedGroup,
-        );
+  // Re-fetch when group filter changes
+  useEffect(() => {
+    refetch();
+  }, [selectedGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const initialForm = {
     fullName: '',
@@ -98,27 +115,26 @@ export default function StudentsPage() {
   };
 
   const [form, setForm] = useState<any>(initialForm);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const openCreate = () => {
     setEditing(null);
     setForm(initialForm);
+    setFormErrors({});
     setModalOpen(true);
   };
 
   const openEdit = (item: any) => {
     setEditing(item);
+    setFormErrors({});
     setForm({
-      fullName:
-        item.fullName ||
-        item.full_name ||
-        `${item.firstName || item.first_name || ''} ${item.lastName || item.last_name || ''}`.trim() ||
-        '',
+      fullName: getDisplayName(item),
       gender: item.gender || 'MALE',
-      birthDate: item.birthDate || '',
-      admissionGrade: String(item.admissionGrade || item.grade || '10'),
-      admissionDate: item.admissionDate || '',
-      expectedGraduationYear: item.expectedGraduationYear || new Date().getFullYear() + 2,
-      groupId: item.group?.id || item.groupId || '',
+      birthDate: item.birthDate || item.birth_date || '',
+      admissionGrade: String(item.admissionGrade || item.admission_grade || '10'),
+      admissionDate: item.admissionDate || item.admission_date || '',
+      expectedGraduationYear: item.expectedGraduationYear || item.expected_graduation_year || new Date().getFullYear() + 2,
+      groupId: String(item.group?.id || item.groupId || item.group_id || ''),
       livingTypeCode: item.livingTypeCode || item.living_type_code || 'DAY_ONLY',
       guardianFullName: item.guardianFullName || item.guardian_full_name || '',
       guardianPhone: item.guardianPhone || item.guardian_phone || '',
@@ -128,18 +144,38 @@ export default function StudentsPage() {
     setModalOpen(true);
   };
 
+  const validate = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!form.fullName.trim()) errors.fullName = "F.I.Sh kiritilishi shart";
+    if (!form.admissionDate) errors.admissionDate = "Qabul sanasi kiritilishi shart";
+    if (!form.guardianFullName.trim()) errors.guardianFullName = "Vasiy ismi kiritilishi shart";
+    if (form.guardianPhone && !/^\+?[\d\s\-()]{7,20}$/.test(form.guardianPhone)) {
+      errors.guardianPhone = "Telefon raqami noto'g'ri formatda";
+    }
+    const gradYear = parseInt(form.expectedGraduationYear, 10);
+    if (isNaN(gradYear) || gradYear < 2000 || gradYear > 2100) {
+      errors.expectedGraduationYear = "Bitiruv yili noto'g'ri";
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async () => {
+    if (!validate()) {
+      toast.error("Formada xatoliklar bor, iltimos tekshiring");
+      return;
+    }
     setIsSubmitting(true);
     try {
       const payload: any = {
         ...form,
+        fullName: form.fullName.trim(),
         admissionGrade: parseInt(form.admissionGrade, 10),
         expectedGraduationYear: parseInt(form.expectedGraduationYear, 10),
       };
 
-      if (form.groupId) {
-        payload.groupId = form.groupId;
-      }
+      if (!payload.groupId) delete payload.groupId;
+      if (!payload.birthDate) delete payload.birthDate;
 
       if (editing) {
         await update(editing.id, payload);
@@ -160,15 +196,6 @@ export default function StudentsPage() {
     }
   };
 
-  const getLivingTypeLabel = (code: string) => {
-    const map: Record<string, string> = {
-      DAY_ONLY: 'Faqat kunduzgi',
-      WEEKDAYS_ONLY: '5 kunlik yotoqxona',
-      FULL_BOARD: "To'liq yotoqxona (7 kun)",
-    };
-    return map[code] || code;
-  };
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -181,7 +208,7 @@ export default function StudentsPage() {
         }}
       />
 
-      {/* Group Selector & Search Bar & View Toggle */}
+      {/* Filters */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-2">
           <Input
@@ -210,7 +237,6 @@ export default function StudentsPage() {
           </div>
         </div>
 
-        {/* Group Filter */}
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <Select value={selectedGroup} onValueChange={setSelectedGroup}>
@@ -219,7 +245,7 @@ export default function StudentsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Barcha Guruhlar</SelectItem>
-              {groups.map((group: any) => (
+              {!groupsLoading && groups.map((group: any) => (
                 <SelectItem key={group.id} value={String(group.id)}>
                   {group.name || group.label}
                 </SelectItem>
@@ -227,7 +253,7 @@ export default function StudentsPage() {
             </SelectContent>
           </Select>
           <span className="text-sm text-muted-foreground">
-            {filteredStudents.length} ta o'quvchi
+            Jami: {total} ta o'quvchi
           </span>
         </div>
       </div>
@@ -240,17 +266,10 @@ export default function StudentsPage() {
       ) : students.length === 0 ? (
         <Card>
           <CardContent className="flex h-32 items-center justify-center text-muted-foreground">
-            O'quvchilar topilmadi
-          </CardContent>
-        </Card>
-      ) : filteredStudents.length === 0 ? (
-        <Card>
-          <CardContent className="flex h-32 items-center justify-center text-muted-foreground">
-            Tanlangan guruhda o'quvchilar topilmadi
+            {search || selectedGroup !== 'all' ? "Qidiruv bo'yicha o'quvchilar topilmadi" : "O'quvchilar mavjud emas"}
           </CardContent>
         </Card>
       ) : viewMode === 'table' ? (
-        // TABLE VIEW
         <div className="space-y-4">
           <div className="overflow-x-auto">
             <Table>
@@ -265,22 +284,20 @@ export default function StudentsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredStudents.map((student: any, idx: number) => (
+                {students.map((student: any, idx: number) => (
                   <TableRow key={student.id} className="hover:bg-muted/50">
-                    <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {(page - 1) * 20 + idx + 1}
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
                           <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                            {student.firstName?.[0] || student.first_name?.[0] || '?'}
-                            {student.lastName?.[0] || student.last_name?.[0] || '?'}
+                            {getInitials(student.fullName || student.full_name, student.firstName || student.first_name, student.lastName || student.last_name)}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex flex-col">
-                          <span className="text-sm font-semibold">
-                            {student.firstName || student.first_name}{' '}
-                            {student.lastName || student.last_name}
-                          </span>
+                          <span className="text-sm font-semibold">{getDisplayName(student)}</span>
                           <span className="text-xs text-muted-foreground">
                             {student.guardianFullName || student.guardian_full_name || '-'}
                           </span>
@@ -309,10 +326,7 @@ export default function StudentsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
-                            setDeleting(student);
-                            setDeleteOpen(true);
-                          }}
+                          onClick={() => { setDeleting(student); setDeleteOpen(true); }}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -324,27 +338,16 @@ export default function StudentsPage() {
             </Table>
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
                 Jami: {total} ta o'quvchi | {page}/{totalPages}-sahifa
               </p>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(page - 1)}
-                  disabled={page === 1}
-                >
+                <Button variant="outline" size="sm" onClick={() => setPage(page - 1)} disabled={page === 1}>
                   Oldingi
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(page + 1)}
-                  disabled={page === totalPages}
-                >
+                <Button variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page === totalPages}>
                   Keyingi
                 </Button>
               </div>
@@ -352,28 +355,20 @@ export default function StudentsPage() {
           )}
         </div>
       ) : (
-        // GRID VIEW
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredStudents.map((student: any) => (
-              <Card
-                key={student.id}
-                className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
-              >
+            {students.map((student: any) => (
+              <Card key={student.id} className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-3 flex-1">
                       <Avatar className="h-10 w-10">
                         <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                          {student.firstName?.[0] || student.first_name?.[0] || '?'}
-                          {student.lastName?.[0] || student.last_name?.[0] || '?'}
+                          {getInitials(student.fullName || student.full_name, student.firstName || student.first_name, student.lastName || student.last_name)}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm line-clamp-2">
-                          {student.firstName || student.first_name}{' '}
-                          {student.lastName || student.last_name}
-                        </p>
+                        <p className="font-semibold text-sm line-clamp-2">{getDisplayName(student)}</p>
                         <p className="text-xs text-muted-foreground font-mono font-bold">
                           ID: {student.studentId || student.student_id || '-'}
                         </p>
@@ -384,12 +379,11 @@ export default function StudentsPage() {
                 </CardHeader>
 
                 <CardContent className="space-y-3">
-                  {/* Info Items */}
                   <div className="space-y-2 text-sm border-t pt-3">
-                    {student.grade && (
+                    {(student.grade || student.admissionGrade) && (
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Sinf:</span>
-                        <Badge variant="outline">{student.grade}-sinf</Badge>
+                        <Badge variant="outline">{student.grade || student.admissionGrade}-sinf</Badge>
                       </div>
                     )}
                     {student.group?.name && (
@@ -401,14 +395,13 @@ export default function StudentsPage() {
                     {(student.guardianFullName || student.guardian_full_name) && (
                       <div className="flex justify-between items-start">
                         <span className="text-muted-foreground">Vasiy:</span>
-                        <span className="font-medium text-xs text-right max-w-xs truncate">
+                        <span className="font-medium text-xs text-right max-w-[160px] truncate">
                           {student.guardianFullName || student.guardian_full_name}
                         </span>
                       </div>
                     )}
                   </div>
 
-                  {/* Action Buttons */}
                   <div className="flex gap-2 pt-2">
                     <Button
                       variant="outline"
@@ -425,10 +418,7 @@ export default function StudentsPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => {
-                        setDeleting(student);
-                        setDeleteOpen(true);
-                      }}
+                      onClick={() => { setDeleting(student); setDeleteOpen(true); }}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -438,27 +428,16 @@ export default function StudentsPage() {
             ))}
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
                 Jami: {total} ta o'quvchi | {page}/{totalPages}-sahifa
               </p>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(page - 1)}
-                  disabled={page === 1}
-                >
+                <Button variant="outline" size="sm" onClick={() => setPage(page - 1)} disabled={page === 1}>
                   Oldingi
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(page + 1)}
-                  disabled={page === totalPages}
-                >
+                <Button variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page === totalPages}>
                   Keyingi
                 </Button>
               </div>
@@ -466,6 +445,8 @@ export default function StudentsPage() {
           )}
         </div>
       )}
+
+      {/* Create/Edit Slide Over */}
       <SlideOver
         open={modalOpen}
         onOpenChange={setModalOpen}
@@ -483,7 +464,9 @@ export default function StudentsPage() {
                 value={form.fullName}
                 onChange={(e) => setForm({ ...form, fullName: e.target.value })}
                 placeholder="Ism va Familiya"
+                className={formErrors.fullName ? 'border-destructive' : ''}
               />
+              {formErrors.fullName && <p className="text-xs text-destructive">{formErrors.fullName}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -532,13 +515,17 @@ export default function StudentsPage() {
                   type="number"
                   value={form.expectedGraduationYear}
                   onChange={(e) => setForm({ ...form, expectedGraduationYear: e.target.value })}
+                  className={formErrors.expectedGraduationYear ? 'border-destructive' : ''}
                 />
+                {formErrors.expectedGraduationYear && (
+                  <p className="text-xs text-destructive">{formErrors.expectedGraduationYear}</p>
+                )}
               </div>
             </div>
 
             <div className="space-y-2">
               <Label>Guruh</Label>
-              <Select value={form.groupId} onValueChange={(v) => setForm({ ...form, groupId: v })}>
+              <Select value={form.groupId || ''} onValueChange={(v) => setForm({ ...form, groupId: v })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Guruhni tanlang" />
                 </SelectTrigger>
@@ -559,6 +546,9 @@ export default function StudentsPage() {
                   value={form.admissionDate}
                   onChange={(date) => setForm({ ...form, admissionDate: date })}
                 />
+                {formErrors.admissionDate && (
+                  <p className="text-xs text-destructive">{formErrors.admissionDate}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Yashash turi *</Label>
@@ -623,7 +613,11 @@ export default function StudentsPage() {
                 value={form.guardianFullName}
                 onChange={(e) => setForm({ ...form, guardianFullName: e.target.value })}
                 placeholder="Vasiyning ism-familiyasi"
+                className={formErrors.guardianFullName ? 'border-destructive' : ''}
               />
+              {formErrors.guardianFullName && (
+                <p className="text-xs text-destructive">{formErrors.guardianFullName}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -632,7 +626,11 @@ export default function StudentsPage() {
                 value={form.guardianPhone}
                 onChange={(e) => setForm({ ...form, guardianPhone: e.target.value })}
                 placeholder="+998901234567"
+                className={formErrors.guardianPhone ? 'border-destructive' : ''}
               />
+              {formErrors.guardianPhone && (
+                <p className="text-xs text-destructive">{formErrors.guardianPhone}</p>
+              )}
             </div>
           </div>
         </div>
@@ -653,12 +651,11 @@ export default function StudentsPage() {
         </div>
       </SlideOver>
 
-      {/* Delete Dialog */}
       <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title="O'quvchini o'chirish"
-        description={`"${deleting?.firstName || deleting?.first_name || ''} ${deleting?.lastName || deleting?.last_name || ''}" ni va barcha bog'langan ma'lumotlarni o'chirishga ishonchingiz komilmi?`}
+        description={`"${getDisplayName(deleting)}" ni o'chirishga ishonchingiz komilmi? Bu amal qaytarib bo'lmaydi.`}
         confirmText="O'chirish"
         variant="destructive"
         onConfirm={handleDelete}

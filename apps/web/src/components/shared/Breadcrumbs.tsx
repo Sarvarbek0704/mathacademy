@@ -41,6 +41,13 @@ export function Breadcrumbs() {
     dorms: 'Yotoqxonalar',
     campuses: 'Kampuslar',
     files: 'Fayllar',
+    reports: 'Hisobotlar',
+    'media-center': 'Media markazi',
+    guardian: 'Ota-ona',
+    student: "O'quvchi profili",
+    grades: 'Baholar',
+    billing: "To'lovlar",
+    discipline: 'Intizom',
   };
 
   return (

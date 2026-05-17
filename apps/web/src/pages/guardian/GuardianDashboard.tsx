@@ -402,10 +402,10 @@ export default function GuardianDashboard() {
   const attendanceRate = attendanceTotal > 0 ? Math.round((present / attendanceTotal) * 100) : null;
 
   const prevPresent = toNumber(prevAttendanceSummary.PRESENT);
+  const prevAbsent = toNumber(prevAttendanceSummary.ABSENT);
+  const prevLate = toNumber(prevAttendanceSummary.LATE);
   const prevTotal =
-    toNumber(prevAttendanceSummary.total) +
-      toNumber(prevAttendanceSummary.ABSENT) +
-      toNumber(prevAttendanceSummary.LATE) || prevPresent;
+    toNumber(prevAttendanceSummary.total) || (prevPresent + prevAbsent + prevLate) || prevPresent;
   const prevAttendanceRate = prevTotal > 0 ? Math.round((prevPresent / prevTotal) * 100) : null;
   const attendanceTrend =
     attendanceRate !== null && prevAttendanceRate !== null

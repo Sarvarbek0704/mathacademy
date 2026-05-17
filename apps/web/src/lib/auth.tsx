@@ -93,12 +93,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUser = useCallback(async () => {
     const token = localStorage.getItem('access_token');
-    const savedUser = localStorage.getItem('user');
     if (!token) {
       setLoading(false);
       return;
     }
 
+    // Optimistically set cached user first for fast render
+    const savedUser = localStorage.getItem('user');
     if (savedUser) {
       try {
         setUser(JSON.parse(savedUser));
@@ -107,7 +108,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    setLoading(false);
+    // Then validate token against server and refresh profile
+    try {
+      const meRes = await api.get('/auth/me');
+      const profile = mapMeResponseToUser(meRes.data);
+      setUser(profile);
+      localStorage.setItem('user', JSON.stringify(profile));
+    } catch {
+      // Token invalid — api interceptor handles redirect on 401
+      // If not 401 (e.g. network error), keep cached user
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
