@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SlideOver } from '@/components/shared/SlideOver';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -40,6 +41,7 @@ import api from '@/lib/api';
 import { toast } from 'sonner';
 
 export default function GroupsPage() {
+  const navigate = useNavigate();
   const { data, loading, setSearch, create, update, remove } =
     useCrud({ endpoint: '/staff/groups' });
   const [modalOpen, setModalOpen] = useState(false);
@@ -276,9 +278,12 @@ export default function GroupsPage() {
                       ? new Date(group.academicYear.startDate).toLocaleDateString('uz')
                       : '—'}
                   </div>
-                  <div className="hover:text-primary cursor-pointer transition-colors">
+                  <button
+                    className="hover:text-primary cursor-pointer transition-colors"
+                    onClick={() => navigate(`/staff/students?groupId=${group.id}`)}
+                  >
                     Ro'yxatni ko'rish →
-                  </div>
+                  </button>
                 </CardFooter>
               </Card>
             ) : (

@@ -156,11 +156,11 @@ export default function SubjectsPage() {
                   <div className="pt-4 border-t flex items-center justify-between text-xs text-muted-foreground">
                     <div className="flex items-center gap-1.5">
                       <Layers className="h-3.5 w-3.5 text-primary" />
-                      <span>{subject.groupCount || 0} guruh</span>
+                      <span>{subject.groupsCount ?? subject.groupCount ?? 0} guruh</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <GraduationCap className="h-3.5 w-3.5 text-primary" />
-                      <span>{subject.studentCount || 0} o'quvchi</span>
+                      <span>{subject.lessonsCount ?? 0} dars</span>
                     </div>
                   </div>
                 </CardContent>

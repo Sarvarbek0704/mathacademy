@@ -38,37 +38,30 @@ function timeToMinutes(t: string): number {
   return h * 60 + (m || 0);
 }
 
-function lessonHeightPx(startsAt: string, endsAt: string, slotHeightPx = 80): number {
-  if (!startsAt || !endsAt) return slotHeightPx;
-  const duration = timeToMinutes(endsAt) - timeToMinutes(startsAt);
-  if (duration <= 0) return slotHeightPx;
-  return Math.max(slotHeightPx * (duration / 60), 48);
+const MIN_HOUR = 8;
+const MAX_HOUR = 21;
+const SLOT_PX = 80;
+const TOTAL_HEIGHT = (MAX_HOUR - MIN_HOUR) * SLOT_PX;
+
+function lessonPosition(startsAt: string, endsAt: string): { top: number; height: number } {
+  if (!startsAt || !endsAt) return { top: 0, height: SLOT_PX };
+  const startMin = timeToMinutes(startsAt);
+  const endMin = timeToMinutes(endsAt);
+  const top = (startMin / 60 - MIN_HOUR) * SLOT_PX;
+  const height = Math.max(((endMin - startMin) / 60) * SLOT_PX, 36);
+  return { top, height };
 }
 
 const WEEKDAYS = [
-  { value: 'MONDAY', label: 'Dushanba' },
-  { value: 'TUESDAY', label: 'Seshanba' },
-  { value: 'WEDNESDAY', label: 'Chorshanba' },
-  { value: 'THURSDAY', label: 'Payshanba' },
-  { value: 'FRIDAY', label: 'Juma' },
-  { value: 'SATURDAY', label: 'Shanba' },
+  { value: 1, label: 'Dushanba' },
+  { value: 2, label: 'Seshanba' },
+  { value: 3, label: 'Chorshanba' },
+  { value: 4, label: 'Payshanba' },
+  { value: 5, label: 'Juma' },
+  { value: 6, label: 'Shanba' },
 ];
 
-const TIME_SLOTS = [
-  '08:00',
-  '09:00',
-  '10:00',
-  '11:00',
-  '12:00',
-  '13:00',
-  '14:00',
-  '15:00',
-  '16:00',
-  '17:00',
-  '18:00',
-  '19:00',
-  '20:00',
-];
+const HOUR_LABELS = Array.from({ length: MAX_HOUR - MIN_HOUR + 1 }, (_, i) => i + MIN_HOUR);
 
 export default function TimetablePage() {
   const {
@@ -370,54 +363,66 @@ export default function TimetablePage() {
           </div>
 
               <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
-                <div className="min-w-[900px]">
-                  {/* Header */}
-                  <div className="grid grid-cols-[120px_repeat(6,1fr)] border-b bg-muted/30">
-                    <div className="p-3" />
-                    {[
-                      { value: 1, label: 'Dushanba' },
-                      { value: 2, label: 'Seshanba' },
-                      { value: 3, label: 'Chorshanba' },
-                      { value: 4, label: 'Payshanba' },
-                      { value: 5, label: 'Juma' },
-                      { value: 6, label: 'Shanba' },
-                    ].map((day) => (
+                <div className="min-w-[800px]">
+                  {/* Header row */}
+                  <div className="grid grid-cols-[72px_repeat(6,1fr)] border-b bg-muted/30 sticky top-0 z-20">
+                    <div className="p-3 border-r" />
+                    {WEEKDAYS.map((day) => (
                       <div key={day.value} className="p-3 text-center border-r last:border-r-0">
-                        <span className="text-xs font-bold uppercase tracking-wider">
-                          {day.label}
-                        </span>
+                        <span className="text-xs font-bold uppercase tracking-wider">{day.label}</span>
                       </div>
                     ))}
                   </div>
-
-                  {/* Body */}
-                  {TIME_SLOTS.map((time) => (
-                    <div
-                      key={time}
-                      className="grid grid-cols-[120px_repeat(6,1fr)] border-b last:border-b-0"
-                    >
-                      <div className="p-3 border-r bg-muted/10 flex items-center justify-center">
-                        <span className="text-xs font-mono font-medium text-muted-foreground">
-                          {time}
-                        </span>
-                      </div>
-                      {[1, 2, 3, 4, 5, 6].map((dayOfWeek) => {
-                        const lessons =
-                          activeTimetable.lessons?.filter(
-                            (l: any) =>
-                              l.dayOfWeek === dayOfWeek &&
-                              l.startsAt?.startsWith(time.split(':')[0]),
-                          ) || [];
-                        return (
-                          <div
-                            key={`${selectedTimetable.id}-${dayOfWeek}-${time}`}
-                            className="p-1.5 border-r last:border-r-0 min-h-[80px] hover:bg-muted/5 transition-colors relative group/cell"
-                          >
-                            {lessons.map((lesson: any) => (
+                  {/* Timeline body */}
+                  <div className="flex" style={{ height: TOTAL_HEIGHT }}>
+                    {/* Time labels */}
+                    <div className="w-[72px] shrink-0 relative border-r bg-muted/10">
+                      {HOUR_LABELS.map((hour) => (
+                        <div
+                          key={hour}
+                          className="absolute left-0 right-0 flex items-start px-2 pt-0.5"
+                          style={{ top: (hour - MIN_HOUR) * SLOT_PX }}
+                        >
+                          <span className="text-[10px] font-mono text-muted-foreground leading-none">
+                            {String(hour).padStart(2, '0')}:00
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Day columns */}
+                    {WEEKDAYS.map((day) => {
+                      const dayLessons =
+                        activeTimetable.lessons?.filter((l: any) => l.dayOfWeek === day.value) || [];
+                      return (
+                        <div
+                          key={day.value}
+                          className="flex-1 relative border-r last:border-r-0 group/col"
+                          style={{ height: TOTAL_HEIGHT }}
+                        >
+                          {/* Hour grid lines */}
+                          {HOUR_LABELS.map((hour, i) => (
+                            <div
+                              key={hour}
+                              className="absolute left-0 right-0 border-t border-border/40"
+                              style={{ top: i * SLOT_PX }}
+                            />
+                          ))}
+                          {/* Half-hour grid lines */}
+                          {HOUR_LABELS.slice(0, -1).map((_, i) => (
+                            <div
+                              key={i}
+                              className="absolute left-0 right-0 border-t border-dashed border-border/20"
+                              style={{ top: i * SLOT_PX + SLOT_PX / 2 }}
+                            />
+                          ))}
+                          {/* Lessons */}
+                          {dayLessons.map((lesson: any) => {
+                            const { top, height } = lessonPosition(lesson.startsAt, lesson.endsAt);
+                            return (
                               <div
                                 key={lesson.id}
-                                style={{ height: lessonHeightPx(lesson.startsAt, lesson.endsAt) }}
-                                className="mb-1 rounded-md border p-2 text-xs bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all cursor-pointer group/lesson relative overflow-hidden"
+                                className="absolute left-1 right-1 rounded-md border p-1.5 text-xs bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 cursor-pointer group/lesson overflow-hidden z-10 transition-colors"
+                                style={{ top, height }}
                                 onClick={() => {
                                   setSelectedSlot(lesson);
                                   setForm({
@@ -436,51 +441,49 @@ export default function TimetablePage() {
                                 <div className="font-bold line-clamp-1 text-blue-900 dark:text-blue-100 pr-4">
                                   {lesson.subject?.name || 'Fan'}
                                 </div>
-                                <div className="text-[10px] text-blue-700 dark:text-blue-300 mt-0.5 font-medium">
-                                  {lesson.teacherName || lesson.teacher?.name || 'Ustoz biriktirilmagan'}
+                                <div className="text-[10px] text-blue-700 dark:text-blue-300 font-medium">
+                                  {lesson.teacherName || lesson.teacher?.name || 'Ustoz'}
                                 </div>
-                                <div className="text-[10px] text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1">
+                                <div className="text-[10px] text-blue-600 dark:text-blue-400 flex items-center gap-1">
                                   <Clock className="h-3 w-3" />
-                                  {lesson.startsAt}-{lesson.endsAt}
+                                  {lesson.startsAt}–{lesson.endsAt}
                                 </div>
-
-                                <div className="absolute top-1 right-1 flex flex-col gap-1 opacity-0 group-hover/lesson:opacity-100 transition-opacity">
-                                  <button
-                                    className="h-5 w-5 rounded bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive hover:text-white transition-colors"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedSlot(lesson);
-                                      setDeleteOpen(true);
-                                    }}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </button>
-                                </div>
+                                <button
+                                  className="absolute top-1 right-1 h-5 w-5 rounded bg-destructive/10 text-destructive items-center justify-center hidden group-hover/lesson:flex hover:bg-destructive hover:text-white transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedSlot(lesson);
+                                    setDeleteOpen(true);
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
                               </div>
-                            ))}
-                            <button
-                              className="absolute bottom-1 right-1 h-5 w-5 rounded-full bg-primary/20 text-primary flex items-center justify-center opacity-0 group-hover/cell:opacity-100 transition-opacity hover:bg-primary hover:text-white"
-                              onClick={() => {
-                                setForm({
-                                  dayOfWeek,
-                                  periodNo: parseInt(time.split(':')[0]) - 7,
-                                  subjectId: '',
-                                  teacherUserId: '',
-                                  room: '',
-                                  startsAt: time,
-                                  endsAt: '',
-                                });
-                                setIsEditing(false);
-                                setModalOpen(true);
-                              }}
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
+                            );
+                          })}
+                          {/* Add button */}
+                          <button
+                            className="absolute bottom-2 right-2 h-6 w-6 rounded-full bg-primary/20 text-primary items-center justify-center hidden group-hover/col:flex hover:bg-primary hover:text-white z-10 transition-colors"
+                            onClick={() => {
+                              setForm({
+                                dayOfWeek: day.value,
+                                periodNo: 1,
+                                subjectId: '',
+                                teacherUserId: '',
+                                room: '',
+                                startsAt: '09:00',
+                                endsAt: '',
+                              });
+                              setIsEditing(false);
+                              setModalOpen(true);
+                            }}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
@@ -541,16 +544,7 @@ export default function TimetablePage() {
                         </div>
                         <p className="text-xs text-muted-foreground">
                           <Clock className="h-3.5 w-3.5 inline mr-1" />
-                          {
-                            [
-                              { value: 1, label: 'Dushanba' },
-                              { value: 2, label: 'Seshanba' },
-                              { value: 3, label: 'Chorshanba' },
-                              { value: 4, label: 'Payshanba' },
-                              { value: 5, label: 'Juma' },
-                              { value: 6, label: 'Shanba' },
-                            ].find((w) => w.value === lesson.dayOfWeek)?.label
-                          }{' '}
+                          {WEEKDAYS.find((w) => w.value === lesson.dayOfWeek)?.label}{' '}
                           - {lesson.startsAt}-{lesson.endsAt}
                         </p>
                         {lesson.room && (
