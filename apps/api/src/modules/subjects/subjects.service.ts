@@ -45,12 +45,17 @@ export class SubjectsService {
       });
       if (existing) throw new BadRequestException('SUBJECT_ALREADY_EXISTS');
 
+      const track_id = args.dto.trackId ? toBigInt(args.dto.trackId, 'trackId') : null;
+
       const subject = await this.prisma.subjects.create({
         data: {
           tenant_id,
           name: args.dto.name.trim(),
+          code: args.dto.code?.trim() || null,
           is_core: args.dto.isCore ?? true,
+          ...(track_id ? { track_id } : {}),
         },
+        include: { student_tracks: { select: { id: true, name: true, color: true } } },
       });
 
       await this.auditLogger.log({
@@ -67,7 +72,14 @@ export class SubjectsService {
       return {
         id: subject.id.toString(),
         name: subject.name,
+        code: subject.code,
         isCore: subject.is_core,
+        trackId: subject.track_id?.toString() || null,
+        track: (subject as any).student_tracks ? {
+          id: (subject as any).student_tracks.id.toString(),
+          name: (subject as any).student_tracks.name,
+          color: (subject as any).student_tracks.color,
+        } : null,
         createdAt: subject.created_at,
       };
     } catch (error) {
@@ -107,6 +119,7 @@ export class SubjectsService {
           take: limit,
           orderBy,
           include: {
+            student_tracks: { select: { id: true, name: true, color: true } },
             _count: {
               select: {
                 assessments: true,
@@ -123,9 +136,17 @@ export class SubjectsService {
         data: items.map((s) => ({
           id: s.id.toString(),
           name: s.name,
+          code: s.code,
           isCore: s.is_core,
+          trackId: s.track_id?.toString() || null,
+          track: (s as any).student_tracks ? {
+            id: (s as any).student_tracks.id.toString(),
+            name: (s as any).student_tracks.name,
+            color: (s as any).student_tracks.color,
+          } : null,
           createdAt: s.created_at,
           assessmentsCount: s._count.assessments,
+          groupCount: s._count.group_subjects,
           groupsCount: s._count.group_subjects,
           certificatesCount: s._count.certificates,
           lessonsCount: s._count.timetable_lessons,
@@ -208,7 +229,15 @@ export class SubjectsService {
 
       const updateData: Prisma.subjectsUpdateInput = {};
       if (args.dto.name) updateData.name = args.dto.name.trim();
+      if (args.dto.code !== undefined) updateData.code = args.dto.code?.trim() || null;
       if (args.dto.isCore !== undefined) updateData.is_core = args.dto.isCore;
+      if (args.dto.trackId !== undefined) {
+        if (args.dto.trackId) {
+          updateData.student_tracks = { connect: { id: toBigInt(args.dto.trackId, 'trackId') } };
+        } else {
+          updateData.student_tracks = { disconnect: true };
+        }
+      }
 
       const updated = await this.prisma.subjects.update({
         where: { id: subject_id },
@@ -230,7 +259,9 @@ export class SubjectsService {
       return {
         id: updated.id.toString(),
         name: updated.name,
+        code: updated.code,
         isCore: updated.is_core,
+        trackId: updated.track_id?.toString() || null,
       };
     } catch (error) {
       rethrowServiceError(error);

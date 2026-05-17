@@ -50,6 +50,7 @@ export class TracksService {
           tenant_id,
           name: args.dto.name.trim(),
           description: args.dto.description?.trim() || null,
+          color: args.dto.color || null,
         },
       });
 
@@ -68,6 +69,7 @@ export class TracksService {
         id: track.id.toString(),
         name: track.name,
         description: track.description,
+        color: track.color,
         createdAt: track.created_at,
       };
     } catch (error) {
@@ -114,7 +116,10 @@ export class TracksService {
           id: t.id.toString(),
           name: t.name,
           description: t.description,
+          color: t.color,
           createdAt: t.created_at,
+          groupCount: t._count.groups,
+          studentCount: t._count.students,
           groupsCount: t._count.groups,
           studentsCount: t._count.students,
         })),
@@ -189,6 +194,7 @@ export class TracksService {
       if (args.dto.name) updateData.name = args.dto.name.trim();
       if (args.dto.description !== undefined)
         updateData.description = args.dto.description?.trim() || null;
+      if (args.dto.color !== undefined) updateData.color = args.dto.color || null;
 
       const updated = await this.prisma.student_tracks.update({
         where: { id: track_id },
@@ -211,6 +217,7 @@ export class TracksService {
         id: updated.id.toString(),
         name: updated.name,
         description: updated.description,
+        color: updated.color,
       };
     } catch (error) {
       rethrowServiceError(error);

@@ -886,10 +886,12 @@ model student_tracks {
   tenant_id   BigInt
   name        String
   description String?
+  color       String?
   created_at  DateTime   @default(now()) @db.Timestamptz(6)
   groups      groups[]
   tenants     tenants    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   students    students[]
+  subjects    subjects[]
 
   @@unique([tenant_id, name])
 }
@@ -946,12 +948,15 @@ model subjects {
   id                BigInt              @id @default(autoincrement())
   tenant_id         BigInt
   name              String
+  code              String?
   is_core           Boolean             @default(true)
+  track_id          BigInt?
   created_at        DateTime            @default(now()) @db.Timestamptz(6)
   assessments       assessments[]
   certificates      certificates[]
   group_subjects    group_subjects[]
   tenants           tenants             @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  student_tracks    student_tracks?     @relation(fields: [track_id], references: [id], onUpdate: NoAction)
   timetable_lessons timetable_lessons[]
 
   @@unique([tenant_id, name])

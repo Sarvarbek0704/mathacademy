@@ -146,8 +146,9 @@ export class GroupsService {
           curatorUserId: g.curator_user_id?.toString(),
           campus: g.campuses ? { id: g.campuses.id.toString(), name: g.campuses.name } : null,
           academicYear: g.academic_years ? { id: g.academic_years.id.toString(), name: g.academic_years.name } : null,
-          track: g.student_tracks ? { id: g.student_tracks.id.toString(), name: g.student_tracks.name } : null,
+          track: g.student_tracks ? { id: g.student_tracks.id.toString(), name: g.student_tracks.name, color: (g.student_tracks as any).color || null } : null,
           curator: g.users ? { id: g.users.id.toString(), name: g.users.full_name } : null,
+          studentCount: g._count?.students || 0,
           studentsCount: g._count?.students || 0,
           subjectsCount: g._count?.group_subjects || 0
         }))
