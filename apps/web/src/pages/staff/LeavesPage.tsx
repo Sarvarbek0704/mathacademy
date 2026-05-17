@@ -95,10 +95,10 @@ export default function LeavesPage() {
       render: (i) => (
         <div className="flex flex-col">
           <span className="font-medium text-sm">
-            {i.student?.fullName || i.student?.full_name || '-'}
+            {i.studentName || i.student?.fullName || i.student?.full_name || '-'}
           </span>
           <span className="text-[10px] text-muted-foreground">
-            {i.student?.group?.name || 'Guruhsiz'}
+            {i.groupName || i.student?.group?.name || 'Guruhsiz'}
           </span>
         </div>
       ),
@@ -106,7 +106,12 @@ export default function LeavesPage() {
     {
       key: 'reason',
       title: 'Sabab',
-      render: (i) => <span className="max-w-xs truncate block text-xs">{i.reason}</span>,
+      render: (i) => (
+        <div className="flex flex-col">
+          <span className="max-w-xs truncate block text-xs">{i.reason}</span>
+          <span className="text-[10px] text-muted-foreground">{requestedByLabels[i.requestedBy] || i.requestedBy}</span>
+        </div>
+      ),
     },
     {
       key: 'status',
@@ -120,10 +125,10 @@ export default function LeavesPage() {
         <div className="flex flex-col text-[11px]">
           <span className="flex items-center gap-1">
             <Clock className="h-3 w-3 text-primary" />{' '}
-            {dayjs(i.startAt || i.start_at).format('DD.MM HH:mm')}
+            {dayjs(i.startAt || i.start_at).format('DD.MM.YY HH:mm')}
           </span>
           <span className="flex items-center gap-1 opacity-60">
-            <Check className="h-3 w-3" /> {dayjs(i.endAt || i.end_at).format('DD.MM HH:mm')}
+            <Check className="h-3 w-3" /> {dayjs(i.endAt || i.end_at).format('DD.MM.YY HH:mm')}
           </span>
         </div>
       ),
@@ -139,6 +144,7 @@ export default function LeavesPage() {
                 variant="outline"
                 size="sm"
                 className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                title="Tasdiqlash"
                 onClick={() => {
                   setSelectedLeave(i);
                   setDecisionType('APPROVE');
@@ -151,6 +157,7 @@ export default function LeavesPage() {
                 variant="outline"
                 size="sm"
                 className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
+                title="Rad etish"
                 onClick={() => {
                   setSelectedLeave(i);
                   setDecisionType('REJECT');
@@ -173,7 +180,7 @@ export default function LeavesPage() {
               }}
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
-              Yopish
+              Qaytdi
             </Button>
           )}
         </div>
@@ -246,7 +253,7 @@ export default function LeavesPage() {
                 <UserCircle2 className="h-10 w-10 text-primary opacity-60" />
                 <div>
                   <p className="font-semibold text-sm">
-                    {selectedLeave.student?.fullName || selectedLeave.student?.full_name}
+                    {selectedLeave.studentName || selectedLeave.student?.fullName || selectedLeave.student?.full_name}
                   </p>
                   <StatusBadge status={selectedLeave.status} />
                 </div>

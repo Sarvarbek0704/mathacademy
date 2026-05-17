@@ -64,9 +64,25 @@ export default function AttendancePage() {
   // Groups for session creation
   const { data: groupsRes } = useQuery({
     queryKey: ['staff', 'groups'],
-    queryFn: async () => (await api.get('/staff/groups?limit=100')).data
+    queryFn: async () => (await api.get('/staff/groups?limit=100')).data,
   });
   const groupsList = groupsRes?.data || [];
+
+  // Timetable lessons for selected group+date
+  const selectedDayOfWeek = form.sessionDate
+    ? new Date(form.sessionDate).getDay() || 7 // Sunday=0 → 7, Mon=1..Sat=6
+    : null;
+
+  const { data: timetablesRes } = useQuery({
+    queryKey: ['staff', 'timetables', 'for-group', form.groupId],
+    queryFn: async () => (await api.get(`/staff/timetables?groupId=${form.groupId}&limit=5`)).data,
+    enabled: !!form.groupId,
+  });
+  const activeTimetable = timetablesRes?.data?.[0] || timetablesRes?.[0];
+
+  const todayLessons: any[] = (activeTimetable?.lessons || []).filter(
+    (l: any) => l.dayOfWeek === selectedDayOfWeek,
+  );
 
   // Session details for marking
   const { data: sessionDetail, isLoading: loadingMarks } = useQuery<AttendanceSessionDetail>({
@@ -152,14 +168,18 @@ export default function AttendancePage() {
 
       {/* New Session SlideOver */}
       <SlideOver open={modalOpen} onOpenChange={setModalOpen} title="Yangi davomat sessiyasi" size="sm">
-        <div className="space-y-6">
+        <div className="space-y-5">
           <div className="space-y-2">
             <Label>Sana</Label>
-            <Input type="date" value={form.sessionDate} onChange={e => setForm({ ...form, sessionDate: e.target.value })} />
+            <Input
+              type="date"
+              value={form.sessionDate}
+              onChange={(e) => setForm({ ...form, sessionDate: e.target.value })}
+            />
           </div>
           <div className="space-y-2">
             <Label>Guruh</Label>
-            <Select value={form.groupId} onValueChange={v => setForm({ ...form, groupId: v })}>
+            <Select value={form.groupId} onValueChange={(v) => setForm({ ...form, groupId: v })}>
               <SelectTrigger><SelectValue placeholder="Guruhni tanlang" /></SelectTrigger>
               <SelectContent>
                 {groupsList.map((g: any) => (
@@ -168,9 +188,48 @@ export default function AttendancePage() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Scheduled lessons for this day */}
+          {form.groupId && form.sessionDate && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Bugungi jadval darslar
+              </p>
+              {todayLessons.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Bu kunda rejalashtirilgan dars yo'q
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {todayLessons.map((l: any) => (
+                    <div
+                      key={l.id}
+                      className="flex items-center justify-between text-xs bg-background border rounded px-2 py-1.5"
+                    >
+                      <div>
+                        <span className="font-medium">{l.subject?.name || 'Fan'}</span>
+                        <span className="text-muted-foreground ml-2">
+                          {l.startsAt}–{l.endsAt}
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[10px] px-2"
+                        onClick={() => setForm({ ...form, type: 'CLASS', note: `${l.subject?.name || 'Fan'} darsi` })}
+                      >
+                        Tanlash
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>Turi</Label>
-            <Select value={form.type} onValueChange={v => setForm({ ...form, type: v })}>
+            <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="CLASS">Dars</SelectItem>
@@ -181,12 +240,21 @@ export default function AttendancePage() {
           </div>
           <div className="space-y-2">
             <Label>Izoh (Ixtiyoriy)</Label>
-            <Textarea value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} placeholder="Sessiya haqida qisqacha ma'lumot" rows={3} />
+            <Textarea
+              value={form.note}
+              onChange={(e) => setForm({ ...form, note: e.target.value })}
+              placeholder="Sessiya haqida qisqacha ma'lumot"
+              rows={2}
+            />
           </div>
         </div>
         <div className="flex flex-col-reverse justify-end gap-2 mt-8 sm:flex-row">
-          <Button variant="outline" className="w-full sm:w-auto" onClick={() => setModalOpen(false)}>Bekor qilish</Button>
-          <Button className="w-full sm:w-auto" onClick={async () => { await create(form); setModalOpen(false); }}>Yaratish</Button>
+          <Button variant="outline" className="w-full sm:w-auto" onClick={() => setModalOpen(false)}>
+            Bekor qilish
+          </Button>
+          <Button className="w-full sm:w-auto" onClick={async () => { await create(form); setModalOpen(false); }}>
+            Yaratish
+          </Button>
         </div>
       </SlideOver>
 
