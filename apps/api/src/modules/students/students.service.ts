@@ -72,6 +72,7 @@ export class StudentsService {
     q?: string;
     campusId?: string;
     groupId?: string;
+    cohortId?: string;
     trackName?: string;
     status?: string;
     livingType?: string;
@@ -100,6 +101,9 @@ export class StudentsService {
           : {}),
         ...(args.groupId
           ? { current_group_id: toBigInt(args.groupId, 'groupId') }
+          : {}),
+        ...(args.cohortId
+          ? { student_cohort: { cohort_id: toBigInt(args.cohortId, 'cohortId') } }
           : {}),
         ...(args.status ? { status: String(args.status) } : {}),
         ...(args.livingType

@@ -70,6 +70,7 @@ export class StudentsController {
       q: query.q,
       campusId: query.campusId,
       groupId: query.groupId || query.currentGroupId,
+      cohortId: query.cohortId,
       trackName: query.trackName,
       status: query.status,
       livingType: query.livingType,

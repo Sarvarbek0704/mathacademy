@@ -32,6 +32,11 @@ export class StudentListQuery {
   @Type(() => String)
   groupId?: string;
 
+  @ApiPropertyOptional({ example: '1', description: 'Filter by cohort ID' })
+  @IsOptional()
+  @Type(() => String)
+  cohortId?: string;
+
   @ApiPropertyOptional({
     example: '1',
     description: 'Legacy alias for groupId (backward compatibility)',
