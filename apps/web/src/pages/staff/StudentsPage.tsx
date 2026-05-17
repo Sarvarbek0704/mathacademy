@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { SlideOver } from '@/components/shared/SlideOver';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { AvatarUpload } from '@/components/shared/AvatarUpload';
 import { useCrud } from '@/hooks/useCrud';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -457,6 +458,23 @@ export default function StudentsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
           <div className="space-y-4">
             <h3 className="text-lg font-medium border-b pb-2">O'quvchi ma'lumotlari</h3>
+
+            {editing && (
+              <div className="flex items-center gap-4">
+                <AvatarUpload
+                  ownerType="STUDENT"
+                  ownerId={editing.id}
+                  currentUrl={editing.photoUrl || editing.photo_url}
+                  purpose="STUDENT_PHOTO"
+                  size="lg"
+                />
+                <div className="text-xs text-muted-foreground">
+                  <p className="font-medium">Rasm yuklash</p>
+                  <p>JPG, PNG, WebP • maks 5MB</p>
+                  <p>Kamera belgisini bosing</p>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>F.I.Sh *</Label>
