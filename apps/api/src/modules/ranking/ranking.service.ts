@@ -97,36 +97,91 @@ export class RankingService {
       const tenantId = toBigInt(args.tenantId, 'tenantId');
       const groupId = toBigInt(args.groupId, 'groupId');
 
-      // Basic validation: group exists and belongs to tenant
       const group = await this.prisma.groups.findFirst({
         where: { id: groupId, tenant_id: tenantId },
       });
       if (!group) throw new NotFoundException('GROUP_NOT_FOUND');
 
-      const rows = await this.prisma.$queryRaw<any[]>(
-        Prisma.sql`
-          WITH ranked AS (${this.totalsSql(tenantId, groupId, args.from, args.to)})
-          SELECT
-            r.student_id,
-            st.full_name,
-            r.total_score,
-            r.rank,
-            r.risk_level
-          FROM ranked r
-          JOIN students st ON st.id = r.student_id
-          ORDER BY r.rank ASC
-        `,
-      );
+      // Fetch assessments in the period for column headers
+      const assessments = await this.prisma.assessments.findMany({
+        where: {
+          tenant_id: tenantId,
+          group_id: groupId,
+          held_at: { gte: new Date(args.from), lte: new Date(args.to) },
+        },
+        include: { subjects: { select: { name: true } } },
+        orderBy: { held_at: 'asc' },
+      });
 
-      return {
-        data: rows.map((r) => ({
-          studentId: r.student_id.toString(),
-          studentName: r.full_name,
-          totalScore: r.total_score,
-          rank: r.rank,
-          riskLevel: r.risk_level,
-        })),
-      };
+      // Fetch all students in the group
+      const students = await this.prisma.students.findMany({
+        where: { tenant_id: tenantId, current_group_id: groupId, status: 'ACTIVE' },
+        select: { id: true, full_name: true },
+        orderBy: { full_name: 'asc' },
+      });
+
+      if (assessments.length === 0 || students.length === 0) {
+        return { assessments: [], data: [] };
+      }
+
+      // Fetch all scores for those assessments
+      const scores = await this.prisma.assessment_scores.findMany({
+        where: {
+          assessment_id: { in: assessments.map((a) => a.id) },
+          student_id: { in: students.map((s) => s.id) },
+        },
+        select: { assessment_id: true, student_id: true, score: true },
+      });
+
+      // Build score map: studentId -> assessmentId -> score
+      const scoreMap = new Map<bigint, Map<bigint, number>>();
+      for (const sc of scores) {
+        if (!scoreMap.has(sc.student_id)) scoreMap.set(sc.student_id, new Map());
+        scoreMap.get(sc.student_id)!.set(sc.assessment_id, Number(sc.score));
+      }
+
+      const assessmentHeaders = assessments.map((a) => ({
+        id: a.id.toString(),
+        title: a.title,
+        subjectName: (a as any).subjects?.name || '',
+        maxScore: Number(a.max_score),
+        heldAt: a.held_at,
+        type: a.type,
+      }));
+
+      const data = students.map((st) => {
+        const studentScores = scoreMap.get(st.id) || new Map();
+        const perAssessment: Record<string, number | null> = {};
+        let totalScored = 0;
+        let totalMax = 0;
+
+        for (const a of assessments) {
+          const raw = studentScores.get(a.id);
+          perAssessment[a.id.toString()] = raw !== undefined ? raw : null;
+          if (raw !== undefined) {
+            totalScored += raw;
+            totalMax += Number(a.max_score);
+          }
+        }
+
+        const pct = totalMax > 0 ? (totalScored / totalMax) * 100 : 0;
+        return {
+          studentId: st.id.toString(),
+          studentName: st.full_name,
+          scores: perAssessment,
+          totalScored: Math.round(totalScored * 100) / 100,
+          totalMax,
+          percentage: Math.round(pct * 100) / 100,
+        };
+      });
+
+      // Sort by percentage desc, assign rank
+      data.sort((a, b) => b.percentage - a.percentage);
+      data.forEach((d, i) => {
+        (d as any).rank = i + 1;
+      });
+
+      return { assessments: assessmentHeaders, data };
     } catch (error) {
       rethrowServiceError(error);
     }
