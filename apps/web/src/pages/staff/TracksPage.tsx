@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { CardGridSkeleton } from '@/components/shared/PageSkeleton';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SlideOver } from '@/components/shared/SlideOver';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -173,9 +174,7 @@ export default function TracksPage() {
       </div>
 
       {loading ? (
-        <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary opacity-50" />
-        </div>
+        <CardGridSkeleton cards={6} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {data.map((track: any) => {

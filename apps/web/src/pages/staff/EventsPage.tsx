@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { CardGridSkeleton } from '@/components/shared/PageSkeleton';
 import { AvatarUpload } from '@/components/shared/AvatarUpload';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SlideOver } from '@/components/shared/SlideOver';
@@ -279,9 +280,7 @@ export default function EventsPage() {
       </div>
 
       {loading ? (
-        <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary opacity-50" />
-        </div>
+        <CardGridSkeleton cards={6} />
       ) : filteredEvents.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-3">
           <Calendar className="h-12 w-12 opacity-20" />

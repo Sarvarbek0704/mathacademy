@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { TablePageSkeleton } from '@/components/shared/PageSkeleton';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -107,11 +108,7 @@ export default function StudentDetailPage() {
   }, [id]);
 
   if (loading) {
-    return (
-      <div className="flex h-96 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary opacity-50" />
-      </div>
-    );
+    return <TablePageSkeleton />;
   }
 
   if (!student) {

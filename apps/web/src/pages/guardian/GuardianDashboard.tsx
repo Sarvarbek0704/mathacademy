@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { DashboardSkeleton } from '@/components/shared/PageSkeleton';
 import api from '@/lib/api';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -313,11 +314,7 @@ export default function GuardianDashboard() {
   });
 
   if (isLoadingProfile) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const student = profileRes?.student;

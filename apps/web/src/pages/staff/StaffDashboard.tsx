@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { StatCard } from '@/components/shared/StatCard';
+import { DashboardSkeleton } from '@/components/shared/PageSkeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   GraduationCap, Users, UserCheck, AlertTriangle, DollarSign,
@@ -156,11 +157,7 @@ export default function StaffDashboard() {
   const revenueTrendData = billingStats?.revenueTrend || [];
 
   if (isLoadingStudents) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CardGridSkeleton } from '@/components/shared/PageSkeleton';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { DataTable, type Column } from '@/components/shared/DataTable';
 import { SlideOver } from '@/components/shared/SlideOver';
@@ -184,9 +185,7 @@ export default function MediaCenterPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary opacity-50" />
-        </div>
+        <CardGridSkeleton cards={6} />
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {files.map((file: any) => (

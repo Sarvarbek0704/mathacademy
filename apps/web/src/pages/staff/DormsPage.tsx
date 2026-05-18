@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CardGridSkeleton } from '@/components/shared/PageSkeleton';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SlideOver } from '@/components/shared/SlideOver';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -262,9 +263,7 @@ export default function DormsPage() {
       />
 
       {loading ? (
-        <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary opacity-50" />
-        </div>
+        <CardGridSkeleton cards={6} />
       ) : dorms.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-3">
           <BedDouble className="h-12 w-12 opacity-20" />

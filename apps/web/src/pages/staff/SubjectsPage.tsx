@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CardGridSkeleton } from '@/components/shared/PageSkeleton';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SlideOver } from '@/components/shared/SlideOver';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -92,9 +93,7 @@ export default function SubjectsPage() {
       </div>
 
       {loading ? (
-        <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary opacity-50" />
-        </div>
+        <CardGridSkeleton cards={6} />
       ) : data.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <BookMarked className="h-12 w-12 text-muted-foreground/30 mb-4" />

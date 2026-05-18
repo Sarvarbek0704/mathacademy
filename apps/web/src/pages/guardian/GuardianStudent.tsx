@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TablePageSkeleton } from '@/components/shared/PageSkeleton';
 import { useAuth, type GuardianUser } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -66,9 +67,7 @@ export default function GuardianStudent() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
+      <TablePageSkeleton />
     );
   }
 
