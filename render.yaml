@@ -26,10 +26,6 @@ services:
         value: madc_rt
       - key: COOKIE_SECURE
         value: true
-      - key: COOKIE_SAME_SITE
-        value: none
-      - key: COOKIE_DOMAIN
-        sync: false   # Render domenini qo'lda kiriting
       - key: BCRYPT_ROUNDS
         value: 12
       - key: ENABLE_SWAGGER

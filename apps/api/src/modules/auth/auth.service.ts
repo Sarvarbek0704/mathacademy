@@ -99,6 +99,14 @@ export class AuthService {
     return process.env.NODE_ENV === 'production';
   }
 
+  private cookieOptions(): { sameSite: 'none' | 'lax'; secure: boolean } {
+    const isProd = process.env.NODE_ENV === 'production';
+    return {
+      sameSite: isProd ? 'none' : 'lax',
+      secure: isProd,
+    };
+  }
+
   private setRefreshCookie(
     res: Response,
     token: string,
@@ -106,8 +114,7 @@ export class AuthService {
   ): void {
     res.cookie(this.cookieName(), token, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: this.isSecureCookie(),
+      ...this.cookieOptions(),
       path: '/api/auth/refresh',
       expires: expiresAt,
     });
@@ -116,8 +123,7 @@ export class AuthService {
   private clearRefreshCookie(res: Response): void {
     res.clearCookie(this.cookieName(), {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: this.isSecureCookie(),
+      ...this.cookieOptions(),
       path: '/api/auth/refresh',
     });
   }
