@@ -9,7 +9,8 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ChevronLeft, ChevronRight, Search, Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface Column<T> {
@@ -36,6 +37,27 @@ interface DataTableProps<T> {
   actions?: (item: T) => ReactNode;
 }
 
+function SkeletonRows({ cols, rows = 6 }: { cols: number; rows?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, i) => (
+        <TableRow key={i} className="hover:bg-transparent">
+          {Array.from({ length: cols }).map((_, j) => (
+            <TableCell key={j}>
+              <Skeleton
+                className={cn(
+                  'h-4',
+                  j === 0 ? 'w-8' : j === 1 ? 'w-36' : j === cols - 1 ? 'w-16' : 'w-24',
+                )}
+              />
+            </TableCell>
+          ))}
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
 export function DataTable<T extends Record<string, any>>({
   columns,
   data,
@@ -49,6 +71,7 @@ export function DataTable<T extends Record<string, any>>({
 }: DataTableProps<T>) {
   const [search, setSearch] = useState('');
   const rows = Array.isArray(data) ? data : [];
+  const colCount = columns.length + (actions ? 1 : 0);
 
   const handleSearch = (val: string) => {
     setSearch(val);
@@ -83,18 +106,11 @@ export function DataTable<T extends Record<string, any>>({
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length + (actions ? 1 : 0)}
-                  className="h-32 text-center"
-                >
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-                </TableCell>
-              </TableRow>
+              <SkeletonRows cols={colCount} rows={6} />
             ) : rows.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={columns.length + (actions ? 1 : 0)}
+                  colSpan={colCount}
                   className="h-32 text-center text-muted-foreground"
                 >
                   {emptyMessage}

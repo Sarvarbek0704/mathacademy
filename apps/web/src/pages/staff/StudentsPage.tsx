@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { CardGridSkeleton } from '@/components/shared/PageSkeleton';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SlideOver } from '@/components/shared/SlideOver';
@@ -279,9 +280,7 @@ export default function StudentsPage() {
 
       {/* Students Grid/Table */}
       {loading ? (
-        <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary opacity-50" />
-        </div>
+        <CardGridSkeleton cards={6} />
       ) : students.length === 0 ? (
         <Card>
           <CardContent className="flex h-32 items-center justify-center text-muted-foreground">

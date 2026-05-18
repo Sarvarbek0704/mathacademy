@@ -1,3 +1,4 @@
+import { TablePageSkeleton } from '@/components/shared/PageSkeleton';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
@@ -102,9 +103,7 @@ export default function GuardianEvents() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
+      <TablePageSkeleton />
     );
   }
 

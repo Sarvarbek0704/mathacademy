@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { CardGridSkeleton } from '@/components/shared/PageSkeleton';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SlideOver } from '@/components/shared/SlideOver';
@@ -404,9 +405,7 @@ export default function TimetablePage() {
             <p className="text-muted-foreground">Jadvalni tanlang</p>
           </div>
         ) : isLoading ? (
-          <div className="flex h-64 items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary opacity-50" />
-          </div>
+          <CardGridSkeleton cards={6} />
         ) : viewMode === 'GRID' && activeTimetable ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between rounded-lg border bg-card p-4">
