@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Eye, EyeOff, Loader2, Users } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { AppLogoIcon } from '@/components/shared/AppLogo';
 import { toast } from 'sonner';
 
 export default function GuardianLogin() {
@@ -45,11 +46,11 @@ export default function GuardianLogin() {
         </div>
         <div className="relative z-10 text-center px-12 max-w-lg" style={{ color: 'white' }}>
           <div className="flex justify-center mb-8">
-            <div className="h-20 w-20 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}>
-              <Users className="h-10 w-10" />
-            </div>
+            <AppLogoIcon size={72} />
           </div>
-          <h1 className="text-4xl font-extrabold mb-4 tracking-tight">Ota-ona paneli</h1>
+          <h1 className="text-4xl font-extrabold mb-4 tracking-tight">
+            Math<span style={{ color: 'rgba(255,255,255,0.7)' }}>Academy</span>
+          </h1>
           <p className="text-base opacity-85 leading-relaxed">
             Farzandingizning baholar, davomat, intizom va to'lov holatini kuzatib boring.
           </p>
@@ -59,9 +60,7 @@ export default function GuardianLogin() {
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-[420px]">
           <div className="lg:hidden flex justify-center mb-8">
-            <div className="h-14 w-14 rounded-xl bg-accent flex items-center justify-center">
-              <Users className="h-7 w-7 text-accent-foreground" />
-            </div>
+            <AppLogoIcon size={52} />
           </div>
 
           <Card className="border-0 shadow-lg">

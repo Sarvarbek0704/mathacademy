@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { AppLogoIcon } from '@/components/shared/AppLogo';
 
 interface NavItem {
   label: string;
@@ -170,12 +171,21 @@ export function StaffSidebar({ mobileOpen, onMobileClose }: StaffSidebarProps) {
           <Link
             to="/staff/dashboard"
             onClick={handleNavClick}
-            className={cn("flex items-center gap-2", collapsed && "lg:hidden")}
+            className={cn("flex items-center gap-2.5", collapsed && "lg:hidden")}
           >
-            <div className="h-8 w-8 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold text-sm shrink-0">
-              M
+            <AppLogoIcon size={32} className="shrink-0" />
+            <div className="leading-tight">
+              <span className="font-extrabold text-sm tracking-tight">Math</span>
+              <span className="font-extrabold text-sm tracking-tight text-indigo-400">Academy</span>
             </div>
-            <span className="font-bold text-sm">MathAcademy</span>
+          </Link>
+          {/* Collapsed desktop: just icon */}
+          <Link
+            to="/staff/dashboard"
+            onClick={handleNavClick}
+            className={cn("hidden", collapsed && "lg:flex")}
+          >
+            <AppLogoIcon size={32} />
           </Link>
 
           {/* Desktop: collapse toggle */}

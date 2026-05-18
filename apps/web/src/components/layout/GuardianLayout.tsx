@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { AppLogoIcon } from '@/components/shared/AppLogo';
 
 const navItems = [
   { label: 'Dashboard', shortLabel: 'Bosh', icon: LayoutDashboard, path: '/guardian/dashboard' },
@@ -90,12 +91,20 @@ export function GuardianLayout() {
             <Link
               to="/guardian/dashboard"
               onClick={handleNavClick}
-              className={cn("flex items-center gap-2", collapsed && "lg:hidden")}
+              className={cn("flex items-center gap-2.5", collapsed && "lg:hidden")}
             >
-              <div className="h-8 w-8 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold text-sm shrink-0">
-                M
+              <AppLogoIcon size={32} className="shrink-0" />
+              <div className="leading-tight">
+                <span className="font-extrabold text-sm tracking-tight">Math</span>
+                <span className="font-extrabold text-sm tracking-tight text-indigo-400">Academy</span>
               </div>
-              <span className="font-bold text-sm">Ota-ona paneli</span>
+            </Link>
+            <Link
+              to="/guardian/dashboard"
+              onClick={handleNavClick}
+              className={cn("hidden", collapsed && "lg:flex")}
+            >
+              <AppLogoIcon size={32} />
             </Link>
 
             {/* Desktop: collapse toggle */}
@@ -186,11 +195,12 @@ export function GuardianLayout() {
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-xs">
-                M
+            <div className="flex items-center gap-2.5">
+              <AppLogoIcon size={28} />
+              <div className="leading-tight">
+                <span className="font-extrabold text-sm tracking-tight">Math</span>
+                <span className="font-extrabold text-sm tracking-tight text-indigo-500">Academy</span>
               </div>
-              <span className="font-bold text-sm">Ota-ona paneli</span>
             </div>
           </div>
 

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="11" fill="url(#bg)"/>
+  <!-- M letter -->
+  <path d="M10 35V14h3.5l7.5 13.5L28.5 14H32v21h-3.5V21.5l-6 10.5h-3l-6-10.5V35H10Z" fill="white"/>
+  <!-- small sigma bottom-right -->
+  <text x="34" y="43" font-family="Georgia,serif" font-size="13" font-weight="700" fill="rgba(255,255,255,0.75)" text-anchor="middle">Σ</text>
+</svg>

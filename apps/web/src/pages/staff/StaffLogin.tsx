@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Eye, EyeOff, Loader2, GraduationCap } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { AppLogoIcon } from '@/components/shared/AppLogo';
 import { toast } from 'sonner';
 
 export default function StaffLogin() {
@@ -53,11 +54,11 @@ export default function StaffLogin() {
         </div>
         <div className="relative z-10 text-primary-foreground text-center px-12 max-w-lg">
           <div className="flex justify-center mb-8">
-            <div className="h-20 w-20 rounded-2xl bg-accent flex items-center justify-center">
-              <GraduationCap className="h-10 w-10 text-accent-foreground" />
-            </div>
+            <AppLogoIcon size={72} />
           </div>
-          <h1 className="text-4xl font-extrabold mb-4 tracking-tight">MathAcademy</h1>
+          <h1 className="text-4xl font-extrabold mb-4 tracking-tight">
+            Math<span className="text-indigo-300">Academy</span>
+          </h1>
           <h2 className="text-xl font-semibold mb-3 opacity-90">Digital Campus</h2>
           <p className="text-base opacity-75 leading-relaxed">
             Akademiya boshqaruv tizimi — o'quvchilar monitoringi, baholash, davomat, intizom va moliya bitta platformada.
@@ -68,9 +69,7 @@ export default function StaffLogin() {
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-[420px]">
           <div className="lg:hidden flex justify-center mb-8">
-            <div className="h-14 w-14 rounded-xl bg-primary flex items-center justify-center">
-              <GraduationCap className="h-7 w-7 text-primary-foreground" />
-            </div>
+            <AppLogoIcon size={52} />
           </div>
 
           <Card className="border-0 shadow-lg">

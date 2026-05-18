@@ -30,7 +30,8 @@
       "PowerShell(Start-Sleep -Seconds 15; \\(Get-Content \"C:\\\\Users\\\\VICTUS\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--lovable-academy-mathacademy-2--claude-worktrees-nice-gates-55a350\\\\445a10b8-9036-4480-a8a1-a012b0d6b91a\\\\tasks\\\\b6muq11o7.output\"\\) | Select-Object -Last 20)",
       "Bash(Get-ChildItem -Path \"D:\\\\lovable_academy\\\\mathacademy_2\\\\apps\\\\api\\\\src\\\\modules\" -Directory)",
       "Bash(Select-Object Name)",
-      "Bash(Get-ChildItem -Path \"D:\\\\lovable_academy\\\\mathacademy_2\" -Filter \"*billing*\" -Recurse -File)"
+      "Bash(Get-ChildItem -Path \"D:\\\\lovable_academy\\\\mathacademy_2\" -Filter \"*billing*\" -Recurse -File)",
+      "Bash(dir \"D:\\\\lovable_academy\\\\mathacademy_2\\\\.claude\\\\worktrees\\\\nice-gates-55a350\\\\apps\\\\web\\\\public\")"
     ]
   }
 }
