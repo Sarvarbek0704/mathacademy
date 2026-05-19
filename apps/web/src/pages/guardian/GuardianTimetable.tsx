@@ -152,7 +152,7 @@ export default function GuardianTimetable() {
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[10px] font-bold bg-primary/5 text-primary px-2 py-1 rounded-full flex items-center gap-1.5 border border-primary/10">
                           <Clock className="h-3 w-3" />
-                          {lesson.startsAt} - {lesson.endsAt}
+                          {lesson.startsAt ? `${lesson.startsAt} – ${lesson.endsAt}` : `${lesson.periodNo}-dars`}
                         </span>
                         <span className="text-[10px] font-semibold text-muted-foreground">
                           {lesson.periodNo}-para
