@@ -20,9 +20,8 @@ export class GuardianLoginDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(96)
-  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*-\d+$/, {
-    message:
-      'studentId must be like tenantSlug-000123 (lowercase slug with numbers)',
+  @Matches(/^[a-z][a-z0-9]*-[A-Za-z0-9][A-Za-z0-9-]*$/, {
+    message: 'studentId must be like mathacademy-MA-0001',
   })
   studentId!: string;
 

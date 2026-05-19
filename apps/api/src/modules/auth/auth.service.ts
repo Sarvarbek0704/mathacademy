@@ -63,12 +63,11 @@ function parseGuardianLogin(
   studentId: string,
 ): { tenantSlug: string; loginId: string; raw: string } | null {
   const s = String(studentId || '').trim();
-  const idx = s.lastIndexOf('-');
+  const idx = s.indexOf('-');
   if (idx <= 0 || idx === s.length - 1) return null;
-  const tenantSlug = s.slice(0, idx).trim();
+  const tenantSlug = s.slice(0, idx).trim().toLowerCase();
   const loginId = s.slice(idx + 1).trim();
   if (!tenantSlug || !loginId) return null;
-  if (!/^\d+$/.test(loginId)) return null;
   return { tenantSlug, loginId, raw: s };
 }
 

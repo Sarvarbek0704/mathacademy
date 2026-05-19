@@ -77,7 +77,7 @@ export default function GuardianLogin() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="studentId">O'quvchi ID</Label>
-                  <Input id="studentId" placeholder="STU-001" value={studentId}
+                  <Input id="studentId" placeholder="mathacademy-MA-0001" value={studentId}
                     onChange={e => setStudentId(e.target.value)} disabled={loading} />
                 </div>
                 <div className="space-y-2">
