@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CardGridSkeleton } from '@/components/shared/PageSkeleton';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SlideOver } from '@/components/shared/SlideOver';
@@ -32,7 +33,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
   CardFooter,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -173,8 +173,11 @@ export default function GroupsPage() {
       </div>
 
       {loading ? (
-        <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary opacity-50" />
+        <CardGridSkeleton cards={6} />
+      ) : filteredData.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <Users className="h-12 w-12 text-muted-foreground/30 mb-4" />
+          <p className="text-muted-foreground font-medium">Guruhlar topilmadi</p>
         </div>
       ) : filteredData.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -242,7 +245,7 @@ export default function GroupsPage() {
                   </div>
                   <div className="mt-4">
                     <CardTitle className="text-xl font-black">{group.name}</CardTitle>
-                    <CardDescription className="flex flex-wrap items-center gap-2 mt-1">
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
                       <Badge
                         variant="secondary"
                         className="text-[10px] uppercase font-bold tracking-wider px-2 py-0"
@@ -261,7 +264,7 @@ export default function GroupsPage() {
                       <span className="text-[10px] font-mono text-muted-foreground">
                         {group.academicYear?.name}
                       </span>
-                    </CardDescription>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-5 flex-1 flex flex-col justify-end">
@@ -279,7 +282,7 @@ export default function GroupsPage() {
                       : '—'}
                   </div>
                   <button
-                    className="hover:text-primary cursor-pointer transition-colors font-medium"
+                    className="hover:text-primary cursor-pointer transition-colors"
                     onClick={() => navigate(`/staff/students?groupId=${group.id}`)}
                   >
                     Ro'yxatni ko'rish →

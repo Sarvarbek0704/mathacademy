@@ -50,7 +50,6 @@ import dayjs from 'dayjs';
 const GENDER_POLICIES = [
   { value: 'MALE', label: 'Erkaklar' },
   { value: 'FEMALE', label: 'Ayollar' },
-  { value: 'MIXED', label: 'Aralash' },
 ];
 
 export default function DormsPage() {
@@ -70,6 +69,7 @@ export default function DormsPage() {
   const [selectedDorm, setSelectedDorm] = useState<any>(null);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [editingDorm, setEditingDorm] = useState<any>(null);
+  const [editingRoom, setEditingRoom] = useState<any>(null);
   const [deletingRoom, setDeletingRoom] = useState<any>(null);
 
   // Forms
@@ -82,7 +82,7 @@ export default function DormsPage() {
   const [roomForm, setRoomForm] = useState({
     roomCode: '',
     capacity: '4',
-    genderPolicy: 'MIXED',
+    genderPolicy: 'MALE',
   });
   const [assignForm, setAssignForm] = useState({
     studentId: '',
@@ -132,8 +132,23 @@ export default function DormsPage() {
       queryClient.invalidateQueries({ queryKey: ['staff', 'dorms', 'detail', selectedDorm?.id] });
       queryClient.invalidateQueries({ queryKey: ['staff', 'dorms'] });
       setRoomFormOpen(false);
-      setRoomForm({ roomCode: '', capacity: '4', genderPolicy: 'MIXED' });
+      setEditingRoom(null);
+      setRoomForm({ roomCode: '', capacity: '4', genderPolicy: 'MALE' });
       toast.success("Xona qo'shildi");
+    },
+    onError: () => toast.error('Xatolik yuz berdi'),
+  });
+
+  const updateRoomMut = useMutation({
+    mutationFn: async ({ roomId, body }: { roomId: string; body: any }) =>
+      (await api.patch(`/staff/dorms/rooms/${roomId}`, body)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staff', 'dorms', 'detail', selectedDorm?.id] });
+      queryClient.invalidateQueries({ queryKey: ['staff', 'dorms'] });
+      setRoomFormOpen(false);
+      setEditingRoom(null);
+      setRoomForm({ roomCode: '', capacity: '4', genderPolicy: 'MALE' });
+      toast.success('Xona yangilandi');
     },
     onError: () => toast.error('Xatolik yuz berdi'),
   });
@@ -184,9 +199,14 @@ export default function DormsPage() {
   const occupiedStudentIds = new Set(
     activeAssignments.map((a: any) => String(a.studentId)),
   );
-  const availableStudents = allStudents.filter(
-    (s: any) => !occupiedStudentIds.has(String(s.id)),
-  );
+  const availableStudents = allStudents.filter((s: any) => {
+    if (occupiedStudentIds.has(String(s.id))) return false;
+    if (selectedRoom?.genderPolicy && selectedRoom.genderPolicy !== 'MIXED') {
+      const gender = s.gender || s.sex;
+      if (gender && gender !== selectedRoom.genderPolicy) return false;
+    }
+    return true;
+  });
 
   const getRoomOccupancyColor = (current: number, capacity: number) => {
     const pct = capacity > 0 ? current / capacity : 0;
@@ -214,19 +234,30 @@ export default function DormsPage() {
   const handleCreateRoom = () => {
     if (!roomForm.roomCode.trim()) { toast.error('Xona kodi kiriting'); return; }
     const capacity = parseInt(roomForm.capacity);
-    if (!capacity || capacity < 1) { toast.error('Sig\'im 1 dan kam bo\'lmasin'); return; }
-    createRoomMut.mutate({
-      dormId: selectedDorm.id,
-      body: {
-        roomCode: roomForm.roomCode.trim(),
-        capacity,
-        genderPolicy: roomForm.genderPolicy || undefined,
-      },
-    });
+    if (!capacity || capacity < 1) { toast.error("Sig'im 1 dan kam bo'lmasin"); return; }
+    const body = {
+      roomCode: roomForm.roomCode.trim(),
+      capacity,
+      genderPolicy: roomForm.genderPolicy || undefined,
+    };
+    if (editingRoom) {
+      updateRoomMut.mutate({ roomId: String(editingRoom.id), body });
+    } else {
+      createRoomMut.mutate({ dormId: selectedDorm.id, body });
+    }
   };
 
   const handleAssign = () => {
     if (!assignForm.studentId) { toast.error("O'quvchini tanlang"); return; }
+    if (selectedRoom?.genderPolicy && selectedRoom.genderPolicy !== 'MIXED') {
+      const student = allStudents.find((s: any) => String(s.id) === String(assignForm.studentId));
+      const gender = student?.gender || student?.sex;
+      if (gender && gender !== selectedRoom.genderPolicy) {
+        const policyLabel = GENDER_POLICIES.find((g) => g.value === selectedRoom.genderPolicy)?.label;
+        toast.error(`Bu xona "${policyLabel}" uchun. Boshqa jins tanlayolmaysiz.`);
+        return;
+      }
+    }
     const body: any = { studentId: assignForm.studentId };
     if (assignForm.startDate) body.startDate = assignForm.startDate;
     if (assignForm.endDate) body.endDate = assignForm.endDate;
@@ -464,7 +495,8 @@ export default function DormsPage() {
               size="sm"
               className="gap-2"
               onClick={() => {
-                setRoomForm({ roomCode: '', capacity: '4', genderPolicy: 'MIXED' });
+                setEditingRoom(null);
+                setRoomForm({ roomCode: '', capacity: '4', genderPolicy: 'MALE' });
                 setRoomFormOpen(true);
               }}
             >
@@ -533,6 +565,23 @@ export default function DormsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingRoom(room);
+                          setRoomForm({
+                            roomCode: room.roomCode || '',
+                            capacity: String(room.capacity ?? 4),
+                            genderPolicy: room.genderPolicy || 'MALE',
+                          });
+                          setRoomFormOpen(true);
+                        }}
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -697,11 +746,14 @@ export default function DormsPage() {
         </div>
       </SlideOver>
 
-      {/* Room Create Form */}
+      {/* Room Create/Edit Form */}
       <SlideOver
         open={roomFormOpen}
-        onOpenChange={setRoomFormOpen}
-        title="Yangi xona qo'shish"
+        onOpenChange={(open) => {
+          setRoomFormOpen(open);
+          if (!open) setEditingRoom(null);
+        }}
+        title={editingRoom ? 'Xonani tahrirlash' : "Yangi xona qo'shish"}
         size="sm"
       >
         <div className="space-y-5">
@@ -744,10 +796,12 @@ export default function DormsPage() {
             <Button
               className="w-full sm:w-auto"
               onClick={handleCreateRoom}
-              disabled={createRoomMut.isPending}
+              disabled={createRoomMut.isPending || updateRoomMut.isPending}
             >
-              {createRoomMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-              Qo'shish
+              {(createRoomMut.isPending || updateRoomMut.isPending) && (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              )}
+              {editingRoom ? 'Saqlash' : "Qo'shish"}
             </Button>
           </div>
         </div>

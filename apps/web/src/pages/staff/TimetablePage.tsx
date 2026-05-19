@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { CardGridSkeleton } from '@/components/shared/PageSkeleton';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SlideOver } from '@/components/shared/SlideOver';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -18,13 +20,14 @@ import {
   Trash2,
   Edit2,
   Plus,
-  Search,
   Loader2,
   Calendar,
   BookOpen,
-  Users,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
+  XCircle,
+  UserCheck,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,36 +35,41 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-
-const MIN_HOUR = 8;
-const MAX_HOUR = 21;
-const SLOT_PX = 80; // px per hour
-const TOTAL_HEIGHT = (MAX_HOUR - MIN_HOUR) * SLOT_PX;
+import dayjs from 'dayjs';
 
 function timeToMinutes(t: string): number {
-  if (!t) return 0;
   const [h, m] = t.split(':').map(Number);
   return h * 60 + (m || 0);
 }
+
+const MIN_HOUR = 8;
+const MAX_HOUR = 21;
+const SLOT_PX = 80;
+const TOTAL_HEIGHT = (MAX_HOUR - MIN_HOUR) * SLOT_PX;
 
 function lessonPosition(startsAt: string, endsAt: string): { top: number; height: number } {
   if (!startsAt || !endsAt) return { top: 0, height: SLOT_PX };
   const startMin = timeToMinutes(startsAt);
   const endMin = timeToMinutes(endsAt);
-  const top = ((startMin / 60) - MIN_HOUR) * SLOT_PX;
+  const top = (startMin / 60 - MIN_HOUR) * SLOT_PX;
   const height = Math.max(((endMin - startMin) / 60) * SLOT_PX, 36);
   return { top, height };
 }
 
-const HOUR_LABELS = Array.from({ length: MAX_HOUR - MIN_HOUR + 1 }, (_, i) => i + MIN_HOUR);
+function getWeekStart(offsetDays: number): Date {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const jsDay = d.getDay(); // 0=Sun
+  const diff = jsDay === 0 ? -6 : 1 - jsDay;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
-const TIME_SLOTS = Array.from({ length: MAX_HOUR - MIN_HOUR }, (_, i) => {
-  const h = MIN_HOUR + i;
-  return `${String(h).padStart(2, '0')}:00`;
-});
-
-function lessonHeightPx(startsAt: string, endsAt: string): number {
-  return lessonPosition(startsAt, endsAt).height;
+function getDateForDow(weekStart: Date, dow: number): Date {
+  const d = new Date(weekStart);
+  d.setDate(d.getDate() + dow - 1); // 1=Mon → +0, 2=Tue → +1, ...
+  return d;
 }
 
 const WEEKDAYS = [
@@ -73,7 +81,12 @@ const WEEKDAYS = [
   { value: 6, label: 'Shanba' },
 ];
 
+const HOUR_LABELS = Array.from({ length: MAX_HOUR - MIN_HOUR + 1 }, (_, i) => i + MIN_HOUR);
+
 export default function TimetablePage() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
   const {
     data: timetable,
     loading,
@@ -82,6 +95,7 @@ export default function TimetablePage() {
     update,
     refetch: refetchTimetables,
   } = useCrud({ endpoint: '/staff/timetables' });
+
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<any>(null);
@@ -89,18 +103,15 @@ export default function TimetablePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>('GRID');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Get the currently selected timetable from the full list
-  const selectedTimetable = selectedTimetableId 
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [attendancePanel, setAttendancePanel] = useState<any>(null);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+
+  const selectedTimetable = selectedTimetableId
     ? timetable?.find((t: any) => String(t.id) === selectedTimetableId)
     : null;
 
-  // Fetch detailed timetable when one is selected
-  const { 
-    data: detailedTimetable, 
-    isLoading: loadingDetails, 
-    refetch: refetchDetails 
-  } = useQuery({
+  const { data: detailedTimetable, isLoading: loadingDetails, refetch: refetchDetails } = useQuery({
     queryKey: ['staff', 'timetables', 'detail', selectedTimetableId],
     queryFn: async () => {
       if (!selectedTimetableId) return null;
@@ -112,6 +123,40 @@ export default function TimetablePage() {
 
   const activeTimetable = detailedTimetable || selectedTimetable;
   const isLoading = loading || (selectedTimetableId && loadingDetails);
+
+  const weekStart = useMemo(() => getWeekStart(weekOffset * 7), [weekOffset]);
+  const weekEnd = useMemo(() => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + 5);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }, [weekStart]);
+
+  const timetableGroupId = activeTimetable?.groupId || activeTimetable?.group?.id;
+  const weekFromStr = dayjs(weekStart).format('YYYY-MM-DD');
+  const weekToStr = dayjs(weekEnd).format('YYYY-MM-DD');
+
+  const { data: weekSessionsRes, refetch: refetchSessions } = useQuery({
+    queryKey: ['staff', 'attendance', 'week', String(timetableGroupId), weekFromStr],
+    queryFn: async () => {
+      const res = await api.get(
+        `/staff/attendance/sessions?groupId=${timetableGroupId}&from=${weekFromStr}&to=${weekToStr}&type=CLASS&limit=50`,
+      );
+      return res.data?.data || [];
+    },
+    enabled: !!timetableGroupId,
+  });
+
+  // Map: dateStr → periodNo → session
+  const sessionsByDatePeriod = useMemo(() => {
+    const map: Record<string, Record<number, any>> = {};
+    for (const s of weekSessionsRes || []) {
+      const dateStr = dayjs(s.sessionDate).format('YYYY-MM-DD');
+      if (!map[dateStr]) map[dateStr] = {};
+      map[dateStr][s.periodNo ?? 0] = s;
+    }
+    return map;
+  }, [weekSessionsRes]);
 
   const [form, setForm] = useState({
     dayOfWeek: 1,
@@ -132,51 +177,59 @@ export default function TimetablePage() {
 
   const { data: subjectsRes } = useQuery({
     queryKey: ['staff', 'subjects', 'for_timetable'],
-    queryFn: async () => {
-      const res = await api.get('/staff/subjects?limit=100');
-      return res.data?.data || [];
-    },
+    queryFn: async () => (await api.get('/staff/subjects?limit=100')).data?.data || [],
   });
   const subjects = subjectsRes || [];
 
   const { data: groupsRes } = useQuery({
     queryKey: ['staff', 'groups', 'for_timetable'],
-    queryFn: async () => {
-      const res = await api.get('/staff/groups?limit=100');
-      return res.data?.data || [];
-    },
+    queryFn: async () => (await api.get('/staff/groups?limit=100')).data?.data || [],
   });
   const groups = groupsRes || [];
 
   const { data: academicYearsRes } = useQuery({
     queryKey: ['academic-years', 'for_timetable'],
-    queryFn: async () => {
-      const res = await api.get('/staff/academic-years?limit=100');
-      return res.data?.data || [];
-    },
+    queryFn: async () => (await api.get('/staff/academic-years?limit=100')).data?.data || [],
   });
   const academicYears = academicYearsRes || [];
 
   const { data: teachersRes } = useQuery({
     queryKey: ['staff', 'users', 'teachers'],
-    queryFn: async () => {
-      const res = await api.get('/staff/users?limit=100');
-      return res.data?.data || [];
-    },
+    queryFn: async () => (await api.get('/staff/users?limit=100')).data?.data || [],
   });
   const teachers = teachersRes || [];
+
+  const handleCreateAttendanceSession = async () => {
+    if (!attendancePanel || !timetableGroupId) return;
+    setIsCreatingSession(true);
+    try {
+      await api.post('/staff/attendance/sessions', {
+        groupId: String(timetableGroupId),
+        sessionDate: attendancePanel.dateStr,
+        type: 'CLASS',
+        periodNo: attendancePanel.lesson.periodNo,
+      });
+      toast.success('Davomat seanssi muvaffaqiyatli yaratildi');
+      await refetchSessions();
+      queryClient.invalidateQueries({ queryKey: ['staff', 'attendance'] });
+      setAttendancePanel(null);
+      navigate('/staff/attendance');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
+    } finally {
+      setIsCreatingSession(false);
+    }
+  };
 
   const handleCreateOrUpdate = async () => {
     if (!form.subjectId || !form.startsAt || !form.endsAt) {
       toast.error("Barcha majburiy maydonlarni to'ldiring");
       return;
     }
-
     if (!selectedTimetable) {
       toast.error('Jadval tanlamayn turibdi');
       return;
     }
-
     setIsSubmitting(true);
     try {
       const payload = {
@@ -188,40 +241,21 @@ export default function TimetablePage() {
         startsAt: form.startsAt,
         endsAt: form.endsAt,
       };
-
       if (isEditing && selectedSlot) {
-        await api.patch(
-          `/staff/timetables/${selectedTimetable.id}/lessons/${selectedSlot.id}`,
-          payload,
-        );
+        await api.patch(`/staff/timetables/${selectedTimetable.id}/lessons/${selectedSlot.id}`, payload);
         toast.success('Dars muvaffaqiyatli yangilandi');
       } else {
         await api.post(`/staff/timetables/${selectedTimetable.id}/lessons`, payload);
         toast.success("Dars muvaffaqiyatli qo'shildi");
       }
-
-      // Invalidate and refetch timetables
       await refetchTimetables();
-      if (selectedTimetableId) {
-        await refetchDetails();
-      }
-
+      if (selectedTimetableId) await refetchDetails();
       setModalOpen(false);
-      setForm({
-        dayOfWeek: 1,
-        periodNo: 1,
-        subjectId: '',
-        teacherUserId: '',
-        room: '',
-        startsAt: '09:00',
-        endsAt: '10:30',
-      });
+      setForm({ dayOfWeek: 1, periodNo: 1, subjectId: '', teacherUserId: '', room: '', startsAt: '09:00', endsAt: '10:30' });
       setIsEditing(false);
       setSelectedSlot(null);
     } catch (error: any) {
-      const message = error?.response?.data?.message || 'Xatolik yuz berdi';
-      toast.error(message);
-      console.error('Error saving lesson:', error);
+      toast.error(error?.response?.data?.message || 'Xatolik yuz berdi');
     } finally {
       setIsSubmitting(false);
     }
@@ -232,7 +266,6 @@ export default function TimetablePage() {
       toast.error("Barcha majburiy maydonlarni to'ldiring");
       return;
     }
-
     setIsSubmitting(true);
     try {
       const payload = {
@@ -240,28 +273,37 @@ export default function TimetablePage() {
         groupId: timetableForm.groupId,
         academicYearId: timetableForm.academicYearId,
       };
-
       if (selectedTimetable && selectedTimetable.id) {
-        // Update existing timetable
         await api.patch(`/staff/timetables/${selectedTimetable.id}`, payload);
         toast.success('Jadval muvaffaqiyatli yangilandi');
       } else {
-        // Create new timetable
         await create(payload);
         toast.success('Jadval muvaffaqiyatli yaratildi');
       }
-
       setTimetableForm({ name: '', groupId: '', academicYearId: '' });
       setIsCreatingTimetable(false);
       setSelectedTimetableId(null);
       setModalOpen(false);
     } catch (error: any) {
-      const message = error?.response?.data?.message || 'Jadval yaratishda xatolik yuz berdi';
-      toast.error(message);
-      console.error('Error creating/updating timetable:', error);
+      toast.error(error?.response?.data?.message || 'Jadval yaratishda xatolik yuz berdi');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const openLessonEdit = (lesson: any) => {
+    setSelectedSlot(lesson);
+    setForm({
+      dayOfWeek: lesson.dayOfWeek,
+      periodNo: lesson.periodNo,
+      subjectId: String(lesson.subjectId || lesson.subject?.id || ''),
+      teacherUserId: String(lesson.teacherUserId || lesson.teacherId || ''),
+      room: lesson.room || '',
+      startsAt: lesson.startsAt || '09:00',
+      endsAt: lesson.endsAt || '10:30',
+    });
+    setIsEditing(true);
+    setModalOpen(true);
   };
 
   return (
@@ -284,9 +326,7 @@ export default function TimetablePage() {
       <div className="space-y-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="flex-1 md:flex-none md:w-64">
-            <Label htmlFor="tt-select" className="mb-2 block">
-              Jadval tanlang
-            </Label>
+            <Label htmlFor="tt-select" className="mb-2 block">Jadval tanlang</Label>
             <Select value={selectedTimetableId || ''} onValueChange={setSelectedTimetableId}>
               <SelectTrigger id="tt-select">
                 <SelectValue placeholder="Jadvalni tanlang..." />
@@ -301,284 +341,392 @@ export default function TimetablePage() {
             </Select>
           </div>
 
-          <div className="flex bg-muted p-1 rounded-lg">
-            <Button
-              variant={viewMode === 'GRID' ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-8"
-              onClick={() => setViewMode('GRID')}
-              disabled={!selectedTimetable}
-            >
-              Grid ko'rinishi
-            </Button>
-            <Button
-              variant={viewMode === 'LIST' ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-8"
-              onClick={() => setViewMode('LIST')}
-              disabled={!selectedTimetable}
-            >
-              Ro'yxat
-            </Button>
-          </div>
-        </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Week navigation — only when timetable selected */}
+            {activeTimetable && (
+              <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setWeekOffset((w) => w - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="min-w-[148px] text-center text-sm font-medium px-1">
+                  {dayjs(weekStart).format('D MMM')} – {dayjs(weekEnd).format('D MMM YYYY')}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setWeekOffset((w) => w + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                {weekOffset !== 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setWeekOffset(0)}
+                  >
+                    Bugun
+                  </Button>
+                )}
+              </div>
+            )}
 
-      {!activeTimetable && !isLoading ? (
-        <div className="flex h-32 items-center justify-center rounded-lg border border-dashed">
-          <p className="text-muted-foreground">Jadvalni tanlang</p>
-        </div>
-      ) : isLoading ? (
-        <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary opacity-50" />
-        </div>
-      ) : viewMode === 'GRID' && activeTimetable ? (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between rounded-lg border bg-card p-4">
-            <div>
-              <h3 className="text-lg font-bold">{activeTimetable.name}</h3>
-              <p className="text-xs text-muted-foreground">
-                {activeTimetable.groupName || activeTimetable.group?.name} • {activeTimetable.academicYearName || activeTimetable.academicYear?.name}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge>{activeTimetable.lessons?.length || activeTimetable.lessonsCount || 0} dars</Badge>
+            <div className="flex bg-muted p-1 rounded-lg">
               <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => {
-                  setTimetableForm({
-                    name: activeTimetable.name,
-                    groupId: String(activeTimetable.groupId || ''),
-                    academicYearId: String(activeTimetable.academicYearId || ''),
-                  });
-                  setIsCreatingTimetable(true);
-                  setModalOpen(true);
-                }}
+                variant={viewMode === 'GRID' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8"
+                onClick={() => setViewMode('GRID')}
+                disabled={!selectedTimetable}
               >
-                <Edit2 className="h-4 w-4" />
+                Grid ko'rinishi
               </Button>
               <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-destructive"
-                onClick={() => {
-                  setSelectedSlot(null);
-                  setDeleteOpen(true);
-                }}
+                variant={viewMode === 'LIST' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8"
+                onClick={() => setViewMode('LIST')}
+                disabled={!selectedTimetable}
               >
-                <Trash2 className="h-4 w-4" />
+                Ro'yxat
               </Button>
             </div>
           </div>
+        </div>
 
-              <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
-                <div className="min-w-[900px]">
-                  {/* Header */}
-                  <div className="grid grid-cols-[120px_repeat(6,1fr)] border-b bg-muted/30">
-                    <div className="p-3" />
-                    {[
-                      { value: 1, label: 'Dushanba' },
-                      { value: 2, label: 'Seshanba' },
-                      { value: 3, label: 'Chorshanba' },
-                      { value: 4, label: 'Payshanba' },
-                      { value: 5, label: 'Juma' },
-                      { value: 6, label: 'Shanba' },
-                    ].map((day) => (
-                      <div key={day.value} className="p-3 text-center border-r last:border-r-0">
-                        <span className="text-xs font-bold uppercase tracking-wider">
+        {!activeTimetable && !isLoading ? (
+          <div className="flex h-32 items-center justify-center rounded-lg border border-dashed">
+            <p className="text-muted-foreground">Jadvalni tanlang</p>
+          </div>
+        ) : isLoading ? (
+          <CardGridSkeleton cards={6} />
+        ) : viewMode === 'GRID' && activeTimetable ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between rounded-lg border bg-card p-4">
+              <div>
+                <h3 className="text-lg font-bold">{activeTimetable.name}</h3>
+                <p className="text-xs text-muted-foreground">
+                  {activeTimetable.groupName || activeTimetable.group?.name} •{' '}
+                  {activeTimetable.academicYearName || activeTimetable.academicYear?.name}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge>{activeTimetable.lessons?.length || activeTimetable.lessonsCount || 0} dars</Badge>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setTimetableForm({
+                      name: activeTimetable.name,
+                      groupId: String(activeTimetable.groupId || ''),
+                      academicYearId: String(activeTimetable.academicYearId || ''),
+                    });
+                    setIsCreatingTimetable(true);
+                    setModalOpen(true);
+                  }}
+                >
+                  <Edit2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive"
+                  onClick={() => {
+                    setSelectedSlot(null);
+                    setDeleteOpen(true);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
+              <div className="min-w-[800px]">
+                {/* Header row */}
+                <div className="grid grid-cols-[72px_repeat(6,1fr)] border-b bg-muted/30 sticky top-0 z-20">
+                  <div className="p-3 border-r" />
+                  {WEEKDAYS.map((day) => {
+                    const dayDate = getDateForDow(weekStart, day.value);
+                    const isToday = dayjs(dayDate).isSame(dayjs(), 'day');
+                    return (
+                      <div
+                        key={day.value}
+                        className={cn('p-3 text-center border-r last:border-r-0', isToday && 'bg-primary/5')}
+                      >
+                        <span className={cn('text-xs font-bold uppercase tracking-wider block', isToday && 'text-primary')}>
                           {day.label}
+                        </span>
+                        <span className={cn('text-[10px]', isToday ? 'text-primary font-semibold' : 'text-muted-foreground')}>
+                          {dayjs(dayDate).format('D MMM')}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Timeline body */}
+                <div className="flex" style={{ height: TOTAL_HEIGHT }}>
+                  {/* Time labels */}
+                  <div className="w-[72px] shrink-0 relative border-r bg-muted/10">
+                    {HOUR_LABELS.map((hour) => (
+                      <div
+                        key={hour}
+                        className="absolute left-0 right-0 flex items-start px-2 pt-0.5"
+                        style={{ top: (hour - MIN_HOUR) * SLOT_PX }}
+                      >
+                        <span className="text-[10px] font-mono text-muted-foreground leading-none">
+                          {String(hour).padStart(2, '0')}:00
                         </span>
                       </div>
                     ))}
                   </div>
 
-                  {/* Body */}
-                  {TIME_SLOTS.map((time) => (
-                    <div
-                      key={time}
-                      className="grid grid-cols-[120px_repeat(6,1fr)] border-b last:border-b-0"
-                    >
-                      <div className="p-3 border-r bg-muted/10 flex items-center justify-center">
-                        <span className="text-xs font-mono font-medium text-muted-foreground">
-                          {time}
-                        </span>
-                      </div>
-                      {[1, 2, 3, 4, 5, 6].map((dayOfWeek) => {
-                        const lessons =
-                          activeTimetable.lessons?.filter(
-                            (l: any) =>
-                              l.dayOfWeek === dayOfWeek &&
-                              l.startsAt?.startsWith(time.split(':')[0]),
-                          ) || [];
-                        return (
+                  {/* Day columns */}
+                  {WEEKDAYS.map((day) => {
+                    const dayLessons =
+                      activeTimetable.lessons?.filter((l: any) => l.dayOfWeek === day.value) || [];
+                    const dayDate = getDateForDow(weekStart, day.value);
+                    const dayDateStr = dayjs(dayDate).format('YYYY-MM-DD');
+                    const isToday = dayjs(dayDate).isSame(dayjs(), 'day');
+
+                    return (
+                      <div
+                        key={day.value}
+                        className={cn(
+                          'flex-1 relative border-r last:border-r-0 group/col',
+                          isToday && 'bg-primary/5',
+                        )}
+                        style={{ height: TOTAL_HEIGHT }}
+                      >
+                        {/* Hour grid lines */}
+                        {HOUR_LABELS.map((hour, i) => (
                           <div
-                            key={`${selectedTimetable.id}-${dayOfWeek}-${time}`}
-                            className="p-1.5 border-r last:border-r-0 min-h-[80px] hover:bg-muted/5 transition-colors relative group/cell"
-                          >
-                            {lessons.map((lesson: any) => (
-                              <div
-                                key={lesson.id}
-                                style={{ height: lessonHeightPx(lesson.startsAt, lesson.endsAt) }}
-                                className="mb-1 rounded-md border p-2 text-xs bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all cursor-pointer group/lesson relative overflow-hidden"
-                                onClick={() => {
-                                  setSelectedSlot(lesson);
-                                  setForm({
-                                    dayOfWeek: lesson.dayOfWeek,
-                                    periodNo: lesson.periodNo,
-                                    subjectId: String(lesson.subjectId || lesson.subject?.id || ''),
-                                    teacherUserId: String(lesson.teacherUserId || lesson.teacherId || ''),
-                                    room: lesson.room || '',
-                                    startsAt: lesson.startsAt || '09:00',
-                                    endsAt: lesson.endsAt || '10:30',
-                                  });
-                                  setIsEditing(true);
-                                  setModalOpen(true);
-                                }}
-                              >
-                                <div className="font-bold line-clamp-1 text-blue-900 dark:text-blue-100 pr-4">
+                            key={hour}
+                            className="absolute left-0 right-0 border-t border-border/40"
+                            style={{ top: i * SLOT_PX }}
+                          />
+                        ))}
+                        {/* Half-hour grid lines */}
+                        {HOUR_LABELS.slice(0, -1).map((_, i) => (
+                          <div
+                            key={i}
+                            className="absolute left-0 right-0 border-t border-dashed border-border/20"
+                            style={{ top: i * SLOT_PX + SLOT_PX / 2 }}
+                          />
+                        ))}
+
+                        {/* Lessons */}
+                        {dayLessons.map((lesson: any) => {
+                          const { top, height } = lessonPosition(lesson.startsAt, lesson.endsAt);
+                          const lessonDateStr = dayDateStr;
+                          const isFuture = dayDate > new Date(new Date().toDateString());
+                          const session = sessionsByDatePeriod[lessonDateStr]?.[lesson.periodNo];
+
+                          return (
+                            <div
+                              key={lesson.id}
+                              className="absolute left-1 right-1 rounded-md border text-xs bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 cursor-pointer group/lesson overflow-hidden z-10 transition-colors"
+                              style={{ top, height }}
+                              onClick={() =>
+                                setAttendancePanel({
+                                  lesson,
+                                  date: dayDate,
+                                  dateStr: lessonDateStr,
+                                  session: session || null,
+                                  isFuture,
+                                })
+                              }
+                            >
+                              <div className="p-1.5 h-full flex flex-col">
+                                <div className="font-bold line-clamp-1 text-blue-900 dark:text-blue-100 pr-10">
                                   {lesson.subject?.name || 'Fan'}
                                 </div>
-                                <div className="text-[10px] text-blue-700 dark:text-blue-300 mt-0.5 font-medium">
-                                  {lesson.teacherName || lesson.teacher?.name || 'Ustoz biriktirilmagan'}
+                                <div className="text-[10px] text-blue-700 dark:text-blue-300 font-medium truncate">
+                                  {lesson.teacherName || lesson.teacher?.name || 'Ustoz'}
                                 </div>
-                                <div className="text-[10px] text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {lesson.startsAt}-{lesson.endsAt}
+                                <div className="text-[10px] text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                                  <Clock className="h-3 w-3 shrink-0" />
+                                  {lesson.startsAt}–{lesson.endsAt}
                                 </div>
-
-                                <div className="absolute top-1 right-1 flex flex-col gap-1 opacity-0 group-hover/lesson:opacity-100 transition-opacity">
-                                  <button
-                                    className="h-5 w-5 rounded bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive hover:text-white transition-colors"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedSlot(lesson);
-                                      setDeleteOpen(true);
-                                    }}
+                                {height >= 62 && (
+                                  <div
+                                    className={cn(
+                                      'text-[9px] flex items-center gap-0.5 mt-auto pt-0.5 border-t',
+                                      session
+                                        ? 'text-green-600 dark:text-green-400 border-green-200 dark:border-green-800'
+                                        : isFuture
+                                        ? 'text-muted-foreground border-border/40'
+                                        : 'text-orange-500 dark:text-orange-400 border-orange-200 dark:border-orange-800',
+                                    )}
                                   >
-                                    <Trash2 className="h-3 w-3" />
-                                  </button>
-                                </div>
+                                    {session ? (
+                                      <><CheckCircle2 className="h-2.5 w-2.5 shrink-0" />Olingan</>
+                                    ) : isFuture ? (
+                                      <><Clock className="h-2.5 w-2.5 shrink-0" />Kelmagan</>
+                                    ) : (
+                                      <><XCircle className="h-2.5 w-2.5 shrink-0" />Olinmagan</>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                            ))}
-                            <button
-                              className="absolute bottom-1 right-1 h-5 w-5 rounded-full bg-primary/20 text-primary flex items-center justify-center opacity-0 group-hover/cell:opacity-100 transition-opacity hover:bg-primary hover:text-white"
-                              onClick={() => {
-                                setForm({
-                                  dayOfWeek,
-                                  periodNo: parseInt(time.split(':')[0]) - 7,
-                                  subjectId: '',
-                                  teacherUserId: '',
-                                  room: '',
-                                  startsAt: time,
-                                  endsAt: '',
-                                });
-                                setIsEditing(false);
-                                setModalOpen(true);
-                              }}
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
+
+                              {/* Hover buttons */}
+                              <div className="absolute top-1 right-1 hidden group-hover/lesson:flex gap-0.5">
+                                <button
+                                  className="h-5 w-5 rounded bg-blue-200/80 text-blue-700 flex items-center justify-center hover:bg-blue-300 transition-colors"
+                                  title="Tahrirlash"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openLessonEdit(lesson);
+                                  }}
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                </button>
+                                <button
+                                  className="h-5 w-5 rounded bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive hover:text-white transition-colors"
+                                  title="O'chirish"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedSlot(lesson);
+                                    setDeleteOpen(true);
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* Add button */}
+                        <button
+                          className="absolute bottom-2 right-2 h-6 w-6 rounded-full bg-primary/20 text-primary items-center justify-center hidden group-hover/col:flex hover:bg-primary hover:text-white z-10 transition-colors"
+                          onClick={() => {
+                            setForm({
+                              dayOfWeek: day.value,
+                              periodNo: 1,
+                              subjectId: '',
+                              teacherUserId: '',
+                              room: '',
+                              startsAt: '09:00',
+                              endsAt: '',
+                            });
+                            setIsEditing(false);
+                            setModalOpen(true);
+                          }}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
-          ) : viewMode === 'LIST' && activeTimetable ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between rounded-lg border bg-card p-4">
-                <div>
-                  <h3 className="text-lg font-bold">{activeTimetable.name}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {activeTimetable.groupName || activeTimetable.group?.name} • {activeTimetable.academicYearName || activeTimetable.academicYear?.name}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge>{activeTimetable.lessons?.length || activeTimetable.lessonsCount || 0} dars</Badge>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => {
-                      setTimetableForm({
-                        name: activeTimetable.name,
-                        groupId: String(activeTimetable.groupId || ''),
-                        academicYearId: String(activeTimetable.academicYearId || ''),
-                      });
-                      setIsCreatingTimetable(true);
-                      setModalOpen(true);
-                    }}
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive"
-                    onClick={() => {
-                      setSelectedSlot(null);
-                      setDeleteOpen(true);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+          </div>
+        ) : viewMode === 'LIST' && activeTimetable ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between rounded-lg border bg-card p-4">
+              <div>
+                <h3 className="text-lg font-bold">{activeTimetable.name}</h3>
+                <p className="text-xs text-muted-foreground">
+                  {activeTimetable.groupName || activeTimetable.group?.name} •{' '}
+                  {activeTimetable.academicYearName || activeTimetable.academicYear?.name}
+                </p>
               </div>
+              <div className="flex items-center gap-2">
+                <Badge>{activeTimetable.lessons?.length || activeTimetable.lessonsCount || 0} dars</Badge>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setTimetableForm({
+                      name: activeTimetable.name,
+                      groupId: String(activeTimetable.groupId || ''),
+                      academicYearId: String(activeTimetable.academicYearId || ''),
+                    });
+                    setIsCreatingTimetable(true);
+                    setModalOpen(true);
+                  }}
+                >
+                  <Edit2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive"
+                  onClick={() => {
+                    setSelectedSlot(null);
+                    setDeleteOpen(true);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
 
-              {activeTimetable.lessons?.length > 0 ? (
-                <div className="space-y-2">
-                  {activeTimetable.lessons.map((lesson: any) => (
+            {activeTimetable.lessons?.length > 0 ? (
+              <div className="space-y-2">
+                {activeTimetable.lessons.map((lesson: any) => {
+                  const lessonDate = getDateForDow(weekStart, lesson.dayOfWeek);
+                  const lessonDateStr = dayjs(lessonDate).format('YYYY-MM-DD');
+                  const isFutureL = lessonDate > new Date(new Date().toDateString());
+                  const session = sessionsByDatePeriod[lessonDateStr]?.[lesson.periodNo];
+
+                  return (
                     <div
                       key={lesson.id}
-                      className="flex items-start justify-between p-3 rounded-lg bg-muted/50 group hover:bg-muted transition-colors"
+                      className="flex items-start justify-between p-3 rounded-lg bg-muted/50 group hover:bg-muted transition-colors cursor-pointer"
+                      onClick={() =>
+                        setAttendancePanel({ lesson, date: lessonDate, dateStr: lessonDateStr, session: session || null, isFuture: isFutureL })
+                      }
                     >
                       <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold text-sm">{lesson.subject?.name || 'Fan'}</p>
                           <Badge variant="outline" className="text-[10px] py-0 h-4">
                             {lesson.teacherName || lesson.teacher?.name || 'Ustozsiz'}
                           </Badge>
+                          <span
+                            className={cn(
+                              'text-[10px] flex items-center gap-0.5 font-medium',
+                              session ? 'text-green-600' : 'text-orange-500',
+                            )}
+                          >
+                            {session ? (
+                              <><CheckCircle2 className="h-3 w-3" />Olingan</>
+                            ) : (
+                              <><XCircle className="h-3 w-3" />Olinmagan</>
+                            )}
+                          </span>
                         </div>
                         <p className="text-xs text-muted-foreground">
                           <Clock className="h-3.5 w-3.5 inline mr-1" />
-                          {
-                            [
-                              { value: 1, label: 'Dushanba' },
-                              { value: 2, label: 'Seshanba' },
-                              { value: 3, label: 'Chorshanba' },
-                              { value: 4, label: 'Payshanba' },
-                              { value: 5, label: 'Juma' },
-                              { value: 6, label: 'Shanba' },
-                            ].find((w) => w.value === lesson.dayOfWeek)?.label
-                          }{' '}
-                          - {lesson.startsAt}-{lesson.endsAt}
+                          {WEEKDAYS.find((w) => w.value === lesson.dayOfWeek)?.label} •{' '}
+                          {dayjs(lessonDate).format('DD MMM')} • {lesson.startsAt}–{lesson.endsAt}
                         </p>
                         {lesson.room && (
                           <p className="text-xs text-muted-foreground">Xona: {lesson.room}</p>
                         )}
                       </div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div
+                        className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7"
-                          onClick={() => {
-                            setSelectedSlot(lesson);
-                            setForm({
-                              dayOfWeek: lesson.dayOfWeek,
-                              periodNo: lesson.periodNo,
-                              subjectId: String(lesson.subjectId || lesson.subject?.id || ''),
-                              teacherUserId: String(lesson.teacherUserId || lesson.teacherId || ''),
-                              room: lesson.room || '',
-                              startsAt: lesson.startsAt || '09:00',
-                              endsAt: lesson.endsAt || '10:30',
-                            });
-                            setIsEditing(true);
-                            setModalOpen(true);
-                          }}
+                          onClick={() => openLessonEdit(lesson)}
                         >
                           <Edit2 className="h-3.5 w-3.5" />
                         </Button>
@@ -595,17 +743,131 @@ export default function TimetablePage() {
                         </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="py-8 text-center">
-                  <p className="text-muted-foreground">Hech qanday dars yo'q</p>
-                </div>
-              )}
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-muted-foreground">Hech qanday dars yo'q</p>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Attendance panel SlideOver */}
+      <SlideOver
+        open={!!attendancePanel}
+        onOpenChange={(o) => {
+          if (!o) setAttendancePanel(null);
+        }}
+        title="Davomat"
+        size="sm"
+      >
+        {attendancePanel && (
+          <div className="space-y-4 pt-4">
+            {/* Lesson info */}
+            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-800 space-y-2">
+              <div className="flex items-center gap-2">
+                <BookOpen className="h-5 w-5 text-blue-600 shrink-0" />
+                <span className="font-semibold text-blue-900 dark:text-blue-100">
+                  {attendancePanel.lesson.subject?.name || 'Fan'}
+                </span>
+              </div>
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                {attendancePanel.lesson.teacherName || attendancePanel.lesson.teacher?.name || "O'qituvchi yo'q"}
+              </p>
+              <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                {attendancePanel.lesson.startsAt} – {attendancePanel.lesson.endsAt}
+              </div>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground pt-2 border-t border-blue-200 dark:border-blue-800">
+                <Calendar className="h-3.5 w-3.5 shrink-0" />
+                {dayjs(attendancePanel.date).format('DD MMMM YYYY')} •{' '}
+                {WEEKDAYS.find((w) => w.value === attendancePanel.lesson.dayOfWeek)?.label}
+              </div>
             </div>
-          ) : null}
-        </div>
-      {/* Form SlideOver */}
+
+            {attendancePanel.session ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 rounded-lg p-3 border border-green-200 dark:border-green-800">
+                  <CheckCircle2 className="h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-semibold text-sm">Davomat olingan</p>
+                    {attendancePanel.session.marksCount > 0 && (
+                      <p className="text-xs opacity-80">
+                        {attendancePanel.session.marksCount} ta o'quvchi belgilangan
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {attendancePanel.session.summary &&
+                  Object.keys(attendancePanel.session.summary).length > 0 && (
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { key: 'PRESENT', label: 'Keldi', cls: 'text-green-700 bg-green-50 border-green-200' },
+                        { key: 'ABSENT', label: 'Kelmadi', cls: 'text-red-700 bg-red-50 border-red-200' },
+                        { key: 'LATE', label: 'Kechikdi', cls: 'text-yellow-700 bg-yellow-50 border-yellow-200' },
+                        { key: 'EXCUSED', label: 'Sababli', cls: 'text-blue-700 bg-blue-50 border-blue-200' },
+                      ].map(({ key, label, cls }) => (
+                        <div key={key} className={cn('rounded-lg p-2 text-center border', cls)}>
+                          <p className="text-lg font-bold">
+                            {attendancePanel.session.summary[key] || 0}
+                          </p>
+                          <p className="text-[9px] opacity-80">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                <Button className="w-full" variant="outline" onClick={() => navigate('/staff/attendance')}>
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Davomat sahifasiga o'tish
+                </Button>
+              </div>
+            ) : attendancePanel.isFuture ? (
+              <div className="flex items-center gap-3 text-muted-foreground bg-muted/40 rounded-lg p-3 border">
+                <Clock className="h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-semibold text-sm">Kelajak sana</p>
+                  <p className="text-xs opacity-80">Bu kun hali kelmagan — davomat olish mumkin emas</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 rounded-lg p-3 border border-orange-200 dark:border-orange-800">
+                  <XCircle className="h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-semibold text-sm">Davomat olinmagan</p>
+                    <p className="text-xs opacity-80">
+                      {attendancePanel.lesson.periodNo}-dars uchun davomat hali belgilanmagan
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={handleCreateAttendanceSession}
+                  disabled={isCreatingSession}
+                >
+                  {isCreatingSession && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Davomat yaratish
+                </Button>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => navigate('/staff/attendance')}
+                >
+                  Davomat sahifasiga o'tish
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </SlideOver>
+
+      {/* Form SlideOver (create/edit lesson or timetable) */}
       <SlideOver
         open={modalOpen}
         onOpenChange={(open) => {
@@ -634,11 +896,9 @@ export default function TimetablePage() {
                 id="tt-name"
                 value={timetableForm.name}
                 onChange={(e) => setTimetableForm({ ...timetableForm, name: e.target.value })}
-
                 placeholder="Masalan: 10-A sinfi jadavali"
               />
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="tt-group">Guruh *</Label>
               <Select
@@ -650,14 +910,11 @@ export default function TimetablePage() {
                 </SelectTrigger>
                 <SelectContent>
                   {groups.map((g: any) => (
-                    <SelectItem key={g.id} value={String(g.id)}>
-                      {g.name}
-                    </SelectItem>
+                    <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="tt-ay">O'quv yili *</Label>
               <Select
@@ -669,36 +926,23 @@ export default function TimetablePage() {
                 </SelectTrigger>
                 <SelectContent>
                   {academicYears.map((ay: any) => (
-                    <SelectItem key={ay.id} value={String(ay.id)}>
-                      {ay.name}
-                    </SelectItem>
+                    <SelectItem key={ay.id} value={String(ay.id)}>{ay.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="flex flex-col-reverse justify-end gap-2 mt-8 sm:flex-row pt-4 border-t">
               <Button
                 variant="outline"
                 className="w-full sm:w-auto"
-                onClick={() => {
-                  setModalOpen(false);
-                  setIsCreatingTimetable(false);
-                }}
+                onClick={() => { setModalOpen(false); setIsCreatingTimetable(false); }}
                 disabled={isSubmitting}
               >
                 Bekor qilish
               </Button>
-              <Button
-                className="w-full sm:w-auto"
-                onClick={handleCreateTimetable}
-                disabled={isSubmitting}
-              >
+              <Button className="w-full sm:w-auto" onClick={handleCreateTimetable} disabled={isSubmitting}>
                 {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saqlanyapti...
-                  </>
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saqlanyapti...</>
                 ) : selectedTimetable && selectedTimetable.id ? (
                   'Jadvalni yangilash'
                 ) : (
@@ -719,9 +963,7 @@ export default function TimetablePage() {
                 value={String(form.dayOfWeek)}
                 onValueChange={(v) => setForm({ ...form, dayOfWeek: parseInt(v, 10) })}
               >
-                <SelectTrigger id="dayofweek">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger id="dayofweek"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {[
                     { value: 1, label: 'Dushanba' },
@@ -732,14 +974,11 @@ export default function TimetablePage() {
                     { value: 6, label: 'Shanba' },
                     { value: 7, label: 'Yakshanba' },
                   ].map((d) => (
-                    <SelectItem key={d.value} value={String(d.value)}>
-                      {d.label}
-                    </SelectItem>
+                    <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="periodo">Dars raqami (Periodo) *</Label>
               <Input
@@ -751,47 +990,27 @@ export default function TimetablePage() {
                 placeholder="1, 2, 3..."
               />
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="subject">Fan *</Label>
-              <Select
-                value={form.subjectId}
-                onValueChange={(v) => setForm({ ...form, subjectId: v })}
-              >
-                <SelectTrigger id="subject">
-                  <SelectValue placeholder="Fanni tanlang" />
-                </SelectTrigger>
+              <Select value={form.subjectId} onValueChange={(v) => setForm({ ...form, subjectId: v })}>
+                <SelectTrigger id="subject"><SelectValue placeholder="Fanni tanlang" /></SelectTrigger>
                 <SelectContent>
                   {subjects.map((s: any) => (
-                    <SelectItem key={s.id} value={String(s.id)}>
-                      {s.name}
-                    </SelectItem>
+                    <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="starttime">Boshlanish vaqti</Label>
-                <Input
-                  id="starttime"
-                  type="time"
-                  value={form.startsAt}
-                  onChange={(e) => setForm({ ...form, startsAt: e.target.value })}
-                />
+                <Input id="starttime" type="time" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="endtime">Tugash vaqti</Label>
-                <Input
-                  id="endtime"
-                  type="time"
-                  value={form.endsAt}
-                  onChange={(e) => setForm({ ...form, endsAt: e.target.value })}
-                />
+                <Input id="endtime" type="time" value={form.endsAt} onChange={(e) => setForm({ ...form, endsAt: e.target.value })} />
               </div>
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="room">Xona / Manzil</Label>
               <Input
@@ -801,51 +1020,26 @@ export default function TimetablePage() {
                 placeholder="Masalan: 301-xona"
               />
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="teacher">O'qituvchi</Label>
-              <Select
-                value={form.teacherUserId}
-                onValueChange={(v) => setForm({ ...form, teacherUserId: v })}
-              >
-                <SelectTrigger id="teacher">
-                  <SelectValue placeholder="O'qituvchini tanlang" />
-                </SelectTrigger>
+              <Select value={form.teacherUserId} onValueChange={(v) => setForm({ ...form, teacherUserId: v })}>
+                <SelectTrigger id="teacher"><SelectValue placeholder="O'qituvchini tanlang" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Biriktirilmagan</SelectItem>
                   {teachers.map((t: any) => (
-                    <SelectItem key={t.id} value={String(t.id)}>
-                      {t.fullName}
-                    </SelectItem>
+                    <SelectItem key={t.id} value={String(t.id)}>{t.fullName}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="flex flex-col-reverse justify-end gap-2 mt-8 sm:flex-row pt-4 border-t">
-              <Button
-                variant="outline"
-                className="w-full sm:w-auto"
-                onClick={() => setModalOpen(false)}
-                disabled={isSubmitting}
-              >
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setModalOpen(false)} disabled={isSubmitting}>
                 Bekor qilish
               </Button>
-              <Button
-                className="w-full sm:w-auto"
-                onClick={handleCreateOrUpdate}
-                disabled={isSubmitting}
-              >
+              <Button className="w-full sm:w-auto" onClick={handleCreateOrUpdate} disabled={isSubmitting}>
                 {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saqlanyapti...
-                  </>
-                ) : isEditing ? (
-                  'Saqlash'
-                ) : (
-                  "Darsni qo'shish"
-                )}
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saqlanyapti...</>
+                ) : isEditing ? 'Saqlash' : "Darsni qo'shish"}
               </Button>
             </div>
           </div>
@@ -866,32 +1060,21 @@ export default function TimetablePage() {
         onConfirm={async () => {
           try {
             if (selectedTimetable && !selectedSlot) {
-              // Delete timetable
               await api.delete(`/staff/timetables/${selectedTimetable.id}`);
               toast.success("Jadval muvaffaqiyatli o'chirildi");
               await refetchTimetables();
-              if (selectedTimetableId) {
-                await refetchDetails();
-              }
+              if (selectedTimetableId) await refetchDetails();
               setSelectedTimetableId(null);
             } else if (selectedSlot && selectedTimetable) {
-              // Delete lesson
-              await api.delete(
-                `/staff/timetables/${selectedTimetable.id}/lessons/${selectedSlot.id}`,
-              );
+              await api.delete(`/staff/timetables/${selectedTimetable.id}/lessons/${selectedSlot.id}`);
               toast.success("Dars muvaffaqiyatli o'chirildi");
               await refetchTimetables();
-              if (selectedTimetableId) {
-                await refetchDetails();
-              }
+              if (selectedTimetableId) await refetchDetails();
             }
-
             setDeleteOpen(false);
             setSelectedSlot(null);
           } catch (error: any) {
-            const message = error?.response?.data?.message || "O'chirishda xatolik yuz berdi";
-            toast.error(message);
-            console.error('Error deleting:', error);
+            toast.error(error?.response?.data?.message || "O'chirishda xatolik yuz berdi");
           }
         }}
       />
