@@ -47,8 +47,13 @@ const MAX_HOUR = 21;
 const SLOT_PX = 80;
 const TOTAL_HEIGHT = (MAX_HOUR - MIN_HOUR) * SLOT_PX;
 
-function lessonPosition(startsAt: string, endsAt: string): { top: number; height: number } {
-  if (!startsAt || !endsAt) return { top: 0, height: SLOT_PX };
+const PERIOD_DURATION_H = 1.5; // 1.5h per period when no explicit time
+
+function lessonPosition(startsAt: string, endsAt: string, periodNo?: number): { top: number; height: number } {
+  if (!startsAt || !endsAt) {
+    const p = (periodNo != null ? periodNo - 1 : 0);
+    return { top: p * PERIOD_DURATION_H * SLOT_PX, height: PERIOD_DURATION_H * SLOT_PX - 4 };
+  }
   const startMin = timeToMinutes(startsAt);
   const endMin = timeToMinutes(endsAt);
   const top = (startMin / 60 - MIN_HOUR) * SLOT_PX;
@@ -525,7 +530,7 @@ export default function TimetablePage() {
 
                         {/* Lessons */}
                         {dayLessons.map((lesson: any) => {
-                          const { top, height } = lessonPosition(lesson.startsAt, lesson.endsAt);
+                          const { top, height } = lessonPosition(lesson.startsAt, lesson.endsAt, lesson.periodNo);
                           const lessonDateStr = dayDateStr;
                           const isFuture = dayDate > new Date(new Date().toDateString());
                           const session = sessionsByDatePeriod[lessonDateStr]?.[lesson.periodNo];
@@ -554,7 +559,7 @@ export default function TimetablePage() {
                                 </div>
                                 <div className="text-[10px] text-blue-600 dark:text-blue-400 flex items-center gap-1">
                                   <Clock className="h-3 w-3 shrink-0" />
-                                  {lesson.startsAt}–{lesson.endsAt}
+                                  {lesson.startsAt ? `${lesson.startsAt}–${lesson.endsAt}` : `${lesson.periodNo}-dars`}
                                 </div>
                                 {height >= 62 && (
                                   <div
@@ -712,7 +717,8 @@ export default function TimetablePage() {
                         <p className="text-xs text-muted-foreground">
                           <Clock className="h-3.5 w-3.5 inline mr-1" />
                           {WEEKDAYS.find((w) => w.value === Number(lesson.dayOfWeek))?.label} •{' '}
-                          {dayjs(lessonDate).format('DD MMM')} • {lesson.startsAt}–{lesson.endsAt}
+                          {dayjs(lessonDate).format('DD MMM')} •{' '}
+                          {lesson.startsAt ? `${lesson.startsAt}–${lesson.endsAt}` : `${lesson.periodNo}-dars`}
                         </p>
                         {lesson.room && (
                           <p className="text-xs text-muted-foreground">Xona: {lesson.room}</p>
