@@ -44,25 +44,20 @@ import { cn } from '@/lib/utils';
 const CERT_TYPES = ['IELTS', 'SAT', 'TOEFL', 'CEFR', 'GMAT', 'GRE', 'OTHER'];
 
 const OUTCOME_TYPES: Record<string, { label: string; color: string; icon: any }> = {
-  UNIVERSITY_ADMIT: {
-    label: 'Universitetga qabul',
+  EARLY_ADMITTED: {
+    label: 'Erta qabul',
+    color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    icon: GraduationCap,
+  },
+  ON_TIME_ADMITTED: {
+    label: 'O\'z vaqtida qabul',
     color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
     icon: GraduationCap,
   },
-  TRANSFER: {
-    label: "Ko'chirildi",
-    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  NOT_ADMITTED: {
+    label: 'Qabul qilinmadi',
+    color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     icon: ArrowRight,
-  },
-  EMPLOYMENT: {
-    label: 'Ishga joylashdi',
-    color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-    icon: Briefcase,
-  },
-  GAP_YEAR: {
-    label: "Ta'til yili",
-    color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-    icon: Clock,
   },
   UNKNOWN: {
     label: "Noma'lum",
@@ -113,7 +108,7 @@ export default function CertificatesPage() {
 
   const [outcomeForm, setOutcomeForm] = useState({
     studentId: '',
-    outcomeType: 'UNIVERSITY_ADMIT',
+    outcomeStatus: 'ON_TIME_ADMITTED',
     institution: '',
     notes: '',
   });
@@ -206,7 +201,7 @@ export default function CertificatesPage() {
     }
     saveOutcomeMut.mutate({
       studentId: outcomeForm.studentId,
-      outcomeType: outcomeForm.outcomeType,
+      outcomeStatus: outcomeForm.outcomeStatus,
       institution: outcomeForm.institution?.trim() || undefined,
       notes: outcomeForm.notes?.trim() || undefined,
     });
@@ -242,7 +237,7 @@ export default function CertificatesPage() {
                 onClick: () => {
                   setOutcomeForm({
                     studentId: '',
-                    outcomeType: 'UNIVERSITY_ADMIT',
+                    outcomeStatus: 'ON_TIME_ADMITTED',
                     institution: '',
                     notes: '',
                   });
@@ -421,7 +416,7 @@ export default function CertificatesPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setOutcomeForm({ studentId: '', outcomeType: 'UNIVERSITY_ADMIT', institution: '', notes: '' });
+                  setOutcomeForm({ studentId: '', outcomeStatus: 'ON_TIME_ADMITTED', institution: '', notes: '' });
                   setOutcomeModalOpen(true);
                 }}
               >
@@ -431,7 +426,7 @@ export default function CertificatesPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {outcomes.map((outcome: any) => {
-                const typeInfo = OUTCOME_TYPES[outcome.outcomeType] || OUTCOME_TYPES.UNKNOWN;
+                const typeInfo = OUTCOME_TYPES[outcome.outcomeStatus] || OUTCOME_TYPES.UNKNOWN;
                 const Icon = typeInfo.icon;
                 return (
                   <Card
@@ -448,7 +443,7 @@ export default function CertificatesPage() {
                             <p className="font-medium text-sm truncate">
                               {outcome.studentName || outcome.student?.fullName || outcome.student?.full_name}
                             </p>
-                            <OutcomeTypeBadge type={outcome.outcomeType} />
+                            <OutcomeTypeBadge type={outcome.outcomeStatus} />
                             {outcome.institution && (
                               <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                                 <Building2 className="h-3 w-3" />
@@ -646,8 +641,8 @@ export default function CertificatesPage() {
           <div className="space-y-2">
             <Label>Natija turi <span className="text-destructive">*</span></Label>
             <Select
-              value={outcomeForm.outcomeType}
-              onValueChange={(v) => setOutcomeForm({ ...outcomeForm, outcomeType: v })}
+              value={outcomeForm.outcomeStatus}
+              onValueChange={(v) => setOutcomeForm({ ...outcomeForm, outcomeStatus: v })}
             >
               <SelectTrigger>
                 <SelectValue />

@@ -108,8 +108,11 @@ export default function ReportsPage() {
       )
     : 92;
 
-  const paidRate = billingStats
-    ? Math.round((billingStats.paidCount / (billingStats.totalCount || 1)) * 100)
+  const paidCount = billingStats
+    ? (billingStats.totalInvoices ?? 0) - (billingStats.unpaidCount ?? 0) - (billingStats.partialCount ?? 0)
+    : 0;
+  const paidRate = billingStats && billingStats.totalInvoices
+    ? Math.round((paidCount / billingStats.totalInvoices) * 100)
     : 76;
 
   const handleExport = async (type: 'ATTENDANCE' | 'BILLING' | 'ASSESSMENTS') => {

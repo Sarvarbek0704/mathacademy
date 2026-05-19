@@ -67,14 +67,14 @@ export class AssessmentListQueryDto {
   @ApiPropertyOptional({
     example: 20,
     minimum: 1,
-    maximum: 200,
+    maximum: 1000,
     description: 'Items per page',
   })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(200)
+  @Max(1000)
   limit?: number = 20;
 
   @ApiPropertyOptional({
@@ -132,13 +132,13 @@ export class GuardianGradesQueryDto {
   @ApiPropertyOptional({
     example: 50,
     minimum: 1,
-    maximum: 200,
+    maximum: 1000,
     description: 'Items per page',
   })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(200)
+  @Max(1000)
   limit?: number = 50;
 }

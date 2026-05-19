@@ -492,7 +492,7 @@ export default function TimetablePage() {
                   {/* Day columns */}
                   {WEEKDAYS.map((day) => {
                     const dayLessons =
-                      activeTimetable.lessons?.filter((l: any) => l.dayOfWeek === day.value) || [];
+                      activeTimetable.lessons?.filter((l: any) => Number(l.dayOfWeek) === day.value) || [];
                     const dayDate = getDateForDow(weekStart, day.value);
                     const dayDateStr = dayjs(dayDate).format('YYYY-MM-DD');
                     const isToday = dayjs(dayDate).isSame(dayjs(), 'day');
@@ -677,7 +677,7 @@ export default function TimetablePage() {
             {activeTimetable.lessons?.length > 0 ? (
               <div className="space-y-2">
                 {activeTimetable.lessons.map((lesson: any) => {
-                  const lessonDate = getDateForDow(weekStart, lesson.dayOfWeek);
+                  const lessonDate = getDateForDow(weekStart, Number(lesson.dayOfWeek));
                   const lessonDateStr = dayjs(lessonDate).format('YYYY-MM-DD');
                   const isFutureL = lessonDate > new Date(new Date().toDateString());
                   const session = sessionsByDatePeriod[lessonDateStr]?.[lesson.periodNo];
@@ -711,7 +711,7 @@ export default function TimetablePage() {
                         </div>
                         <p className="text-xs text-muted-foreground">
                           <Clock className="h-3.5 w-3.5 inline mr-1" />
-                          {WEEKDAYS.find((w) => w.value === lesson.dayOfWeek)?.label} •{' '}
+                          {WEEKDAYS.find((w) => w.value === Number(lesson.dayOfWeek))?.label} •{' '}
                           {dayjs(lessonDate).format('DD MMM')} • {lesson.startsAt}–{lesson.endsAt}
                         </p>
                         {lesson.room && (

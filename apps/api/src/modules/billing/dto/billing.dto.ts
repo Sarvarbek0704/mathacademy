@@ -290,14 +290,14 @@ export class ListInvoicesQueryDto {
   @ApiPropertyOptional({
     example: 20,
     minimum: 1,
-    maximum: 200,
+    maximum: 1000,
     description: 'Items per page',
   })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(200)
+  @Max(1000)
   limit?: number = 20;
 }
 
@@ -421,13 +421,13 @@ export class ListPaymentsQueryDto {
   @ApiPropertyOptional({
     example: 20,
     minimum: 1,
-    maximum: 200,
+    maximum: 1000,
     description: 'Items per page',
   })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(200)
+  @Max(1000)
   limit?: number = 20;
 }

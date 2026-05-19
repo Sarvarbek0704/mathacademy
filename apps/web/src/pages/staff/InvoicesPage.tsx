@@ -31,7 +31,7 @@ export default function InvoicesPage() {
   const studentsList = studentsRes?.data || [];
 
   const columns: Column<any>[] = [
-    { key: 'student', title: "O'quvchi", render: (i) => i.student?.fullName || i.student?.full_name || '-' },
+    { key: 'student', title: "O'quvchi", render: (i) => i.studentName || i.student?.fullName || i.student?.full_name || '-' },
     { key: 'amount', title: 'Summa', render: (i) => <span className="font-bold">{Number(i.amount || 0).toLocaleString()} so'm</span> },
     { key: 'type', title: 'Turi', render: (i) => i.type || '-' },
     { key: 'status', title: 'Holat', render: (i) => <StatusBadge status={i.status || 'UNPAID'} /> },

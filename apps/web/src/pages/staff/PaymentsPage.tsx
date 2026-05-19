@@ -38,13 +38,15 @@ export default function PaymentsPage() {
     queryFn: async () => (await api.get('/staff/billing/summary')).data,
   });
 
-  const totalCollected = billingSummary?.totalCollected ?? 0;
-  const totalPending = billingSummary?.totalPending ?? 0;
-  const totalOverdue = billingSummary?.totalOverdue ?? 0;
+  const summary = billingSummary?.data || billingSummary || {};
+  const totalCollected = Number(summary.currentMonthRevenue ?? 0);
+  const totalPending = Number(summary.unpaidTotal ?? 0);
+  const totalOverdue = 0;
 
-  const paidCount = billingSummary?.paidCount ?? 0;
-  const pendingCount = billingSummary?.pendingCount ?? 0;
-  const partialCount = billingSummary?.partialCount ?? 0;
+  const totalInvoices = summary.totalInvoices ?? 0;
+  const pendingCount = summary.unpaidCount ?? 0;
+  const partialCount = summary.partialCount ?? 0;
+  const paidCount = Math.max(0, totalInvoices - pendingCount - partialCount);
   const totalCount = paidCount + pendingCount + partialCount || 1;
   const paymentStats = [
     { name: "To'langan", value: Math.round((paidCount / totalCount) * 100), color: 'hsl(152,60%,40%)' },

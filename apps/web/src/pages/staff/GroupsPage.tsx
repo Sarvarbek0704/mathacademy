@@ -277,9 +277,7 @@ export default function GroupsPage() {
                 <CardFooter className="p-4 border-t bg-muted/20 flex justify-between text-[11px] font-medium text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    {group.academicYear?.startDate
-                      ? new Date(group.academicYear.startDate).toLocaleDateString('uz')
-                      : '—'}
+                    {group.academicYear?.name || '—'}
                   </div>
                   <button
                     className="hover:text-primary cursor-pointer transition-colors"
