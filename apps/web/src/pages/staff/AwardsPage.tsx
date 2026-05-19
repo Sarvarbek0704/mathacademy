@@ -94,7 +94,7 @@ export default function AwardsPage() {
     queryKey: ['staff', 'awards', 'statistics'],
     queryFn: async () => (await api.get('/staff/awards/statistics')).data,
   });
-  const stats = statsRes || {};
+  const stats = statsRes?.data || statsRes || {};
 
   const { data: detailRes, isLoading: detailLoading } = useQuery({
     queryKey: ['staff', 'awards', 'detail', activeAward?.id],

@@ -106,7 +106,7 @@ export default function BillingPage() {
     queryFn: async () => (await api.get('/staff/billing/summary')).data,
   });
   const summary = summaryRes?.data || summaryRes || {};
-  const trend: any[] = summary.trend || [];
+  const trend: any[] = summary.revenueTrend || summary.trend || [];
 
   const { data: invoicesRes, isLoading: invoicesLoading } = useQuery({
     queryKey: ['staff', 'billing', 'invoices', page, statusFilter, typeFilter, search],
@@ -140,7 +140,7 @@ export default function BillingPage() {
     }
     recordPaymentMut.mutate({
       invoiceId: selectedInvoice.id,
-      amount: Number(payForm.amount),
+      paidAmount: Number(payForm.amount),
       method: payForm.method,
       note: payForm.note?.trim() || undefined,
     });

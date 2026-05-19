@@ -115,44 +115,16 @@ export default function AssessmentsPage() {
   });
   const subjectsList = subjectsRes?.data || [];
 
-  // Fetch selected group's subjects (optional - for reference only)
+  // Fetch selected group detail (for subjects list)
   const { data: selectedGroupRes } = useQuery({
-    queryKey: ['staff', 'groups', form.groupId, 'subjects'],
+    queryKey: ['staff', 'groups', form.groupId, 'detail'],
     queryFn: async () => (await api.get(`/staff/groups/${form.groupId}`)).data,
     enabled: !!form.groupId,
   });
   const selectedGroup = selectedGroupRes?.data || selectedGroupRes;
-  // detail() returns snake_case track_id; list() returns camelCase trackId — handle both
-  const formGroupTrackId = (
-    selectedGroup?.trackId || selectedGroup?.track_id
-  )?.toString() || '';
 
-  // Always fetch track subjects when group has a track
-  const { data: formTrackSubjectsRes } = useQuery({
-    queryKey: ['staff', 'tracks', formGroupTrackId, 'subjects'],
-    queryFn: async () => (await api.get(`/staff/tracks/${formGroupTrackId}/subjects`)).data,
-    enabled: !!formGroupTrackId && modalOpen,
-  });
-  // Endpoint returns a plain array: [{ id, subjectId, name, code, role }]
-  const formTrackSubjects: any[] = Array.isArray(formTrackSubjectsRes)
-    ? formTrackSubjectsRes
-    : formTrackSubjectsRes?.data || [];
-  const formMainSubject = formTrackSubjects.find((s: any) => s.role === 'MAIN');
-
-  // Map to { id, name } objects for the subject dropdown
-  const trackMappedSubjects = formTrackSubjects
-    .map((ts: any) => ({ id: ts.subjectId, name: ts.name, code: ts.code }))
-    .filter((s: any) => s?.id);
-
-  // Group has a track → use ONLY track subjects (strict, no fallback to other subjects)
-  // Group has no track → use group_subjects junction
-  // No group selected → empty
-  const groupSubjects = selectedGroup?.subjects || [];
-  const availableSubjects = !form.groupId
-    ? []
-    : formGroupTrackId
-    ? trackMappedSubjects        // track mavjud → faqat track fanlari
-    : groupSubjects;             // track yo'q → group_subjects
+  // Subjects come from group_subjects junction — available for any group
+  const availableSubjects: any[] = (selectedGroup?.subjects || []).filter((s: any) => s?.id);
 
   // Fetch active timetable for the selected group (only when creating new assessment)
   const { data: timetablesRes } = useQuery({
@@ -200,31 +172,17 @@ export default function AssessmentsPage() {
     enabled: !!scoringAssessment,
   });
 
-  // For BLOCK_TEST: fetch group detail to get trackId
+  // For BLOCK_TEST: fetch group detail to get group subjects for column headers
   const { data: scoringGroupRes } = useQuery({
     queryKey: ['staff', 'groups', 'detail', detail?.group?.id],
     queryFn: async () => (await api.get(`/staff/groups/${detail!.group.id}`)).data,
     enabled: !!detail?.group?.id && isBlockTest,
   });
-  const scoringRawGroup = scoringGroupRes?.data || scoringGroupRes;
-  // detail() returns track_id (snake_case); handle both variants
-  const scoringTrackId = (
-    scoringRawGroup?.trackId || scoringRawGroup?.track_id
-  )?.toString() || '';
-
-  // For BLOCK_TEST: fetch track subjects
-  const { data: trackSubjectsRes } = useQuery({
-    queryKey: ['staff', 'tracks', scoringTrackId, 'subjects'],
-    queryFn: async () => (await api.get(`/staff/tracks/${scoringTrackId}/subjects`)).data,
-    enabled: !!scoringTrackId && isBlockTest,
-  });
-  // Endpoint returns a plain array: [{ id, subjectId, name, code, role }]
-  const trackSubjects: any[] = Array.isArray(trackSubjectsRes)
-    ? trackSubjectsRes
-    : trackSubjectsRes?.data || [];
-  const mainSubject = trackSubjects.find((s: any) => s.role === 'MAIN');
-  const secondarySubject = trackSubjects.find((s: any) => s.role === 'SECONDARY');
-  const mandatorySubjects = trackSubjects.filter((s: any) => s.role === 'MANDATORY');
+  const scoringGroupSubjects: any[] = (scoringGroupRes?.data || scoringGroupRes)?.subjects || [];
+  // Map group subjects to block-test column roles by index
+  const mainSubject = scoringGroupSubjects[0];
+  const secondarySubject = scoringGroupSubjects[1];
+  const mandatorySubjects = scoringGroupSubjects.slice(2, 5);
 
   // Fetch all students in the group to ensure we can score everyone
   const { data: groupStudentsRes } = useQuery({
@@ -722,8 +680,6 @@ export default function AssessmentsPage() {
                   placeholder={
                     !form.groupId
                       ? 'Avval guruhni tanlang'
-                      : formGroupTrackId && trackMappedSubjects.length === 0
-                      ? 'Yo\'nalish fanlari yuklanmoqda...'
                       : availableSubjects.length === 0
                       ? 'Bu guruhga fan biriktirilmagan'
                       : 'Fanni tanlang'
@@ -748,10 +704,6 @@ export default function AssessmentsPage() {
                   ...form,
                   type: v,
                   maxScore: v === 'BLOCK_TEST' ? '189' : form.maxScore,
-                  subjectId:
-                    v === 'BLOCK_TEST' && formMainSubject
-                      ? String(formMainSubject.subjectId || formMainSubject.subject?.id || '')
-                      : form.subjectId,
                 })
               }
             >
