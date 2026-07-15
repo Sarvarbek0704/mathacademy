@@ -1,13 +1,33 @@
 /**
- * MathAcademy — Production Seed
+ * MathAcademy — demo/development seed.
  *
- * Accounts created:
- *  REAL  superadmin : admin         / MathAdmin@2025!
- *  DEMO  superadmin : demo          / Demo@1234        (read-only)
- *  REAL  teachers   : teacher.XXX   / Ustoz@2025!      (10 ta)
- *  DEMO  teacher    : demo.teacher  / Demo@1234        (read-only)
- *  REAL  guardian   : MA-0001…MA-0060 / Ota@12345     (60 ta)
- *  DEMO  guardian   : MA-DEMO       / Demo@1234
+ * ⚠️  SECURITY — read before changing anything here.
+ *
+ * This script creates working superadmin, teacher and guardian accounts.
+ * It is meant for LOCAL DEVELOPMENT and DEMO environments only.
+ *
+ * Two safeguards protect production:
+ *
+ *   1. Running with NODE_ENV=production aborts unless ALLOW_SEED=true is set
+ *      explicitly. Seeding a live tenant is never something that should
+ *      happen by accident.
+ *
+ *   2. Passwords are read from the environment. The fallbacks below are used
+ *      ONLY outside production; when NODE_ENV=production the script refuses to
+ *      start unless every password is supplied via env.
+ *
+ * Why this matters: an earlier version hardcoded the passwords here AND
+ * published them in the public README, while `npm run seed:prod` pointed at
+ * this same file. Anyone reading the repository could have signed in as
+ * superadmin on a seeded production instance.
+ *
+ * Accounts created (passwords come from env — see the SEED_* keys below):
+ *   superadmin : admin
+ *   demo admin : demo            (read-only)
+ *   teachers   : teacher.001…010
+ *   demo teacher: demo.teacher   (read-only)
+ *   guardians  : MA-0001…MA-0060
+ *   demo guardian: MA-DEMO       (read-only)
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -23,6 +43,55 @@ if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL not set');
   process.exit(1);
 }
+
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+// ─── Safeguard 1: never seed production by accident ──────────────────────────
+if (IS_PRODUCTION && process.env.ALLOW_SEED !== 'true') {
+  console.error(
+    '\n❌ Refusing to seed: NODE_ENV=production.\n' +
+      '   This script creates privileged accounts and is intended for local/demo use.\n' +
+      '   If you genuinely need to seed a production database, set ALLOW_SEED=true\n' +
+      '   and supply every SEED_* password via the environment.\n',
+  );
+  process.exit(1);
+}
+
+/**
+ * Safeguard 2: resolve a seed password.
+ *
+ * Outside production the documented demo fallback is used so `npm run seed`
+ * keeps working with no setup. In production there is no fallback — the value
+ * must come from the environment or the script aborts.
+ */
+function seedPassword(envKey: string, devFallback: string): string {
+  const fromEnv = process.env[envKey];
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+
+  if (IS_PRODUCTION) {
+    console.error(
+      `\n❌ ${envKey} is not set.\n` +
+        '   Production seeding requires every password to be supplied explicitly.\n',
+    );
+    process.exit(1);
+  }
+  return devFallback;
+}
+
+/**
+ * Resolved at module load — deliberately BEFORE any database work.
+ *
+ * An earlier revision resolved these inside main(), after the tenant and
+ * permission rows had already been written. A production run missing a
+ * SEED_* value would therefore half-seed the database and only then abort.
+ * Failing before the first query keeps the operation all-or-nothing.
+ */
+const SEED_PASSWORDS = {
+  admin: seedPassword('SEED_ADMIN_PASSWORD', 'MathAdmin@2025!'),
+  demo: seedPassword('SEED_DEMO_PASSWORD', 'Demo@1234'),
+  teacher: seedPassword('SEED_TEACHER_PASSWORD', 'Ustoz@2025!'),
+  guardian: seedPassword('SEED_GUARDIAN_PASSWORD', 'Ota@12345'),
+} as const;
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
@@ -350,11 +419,13 @@ async function main() {
   console.log(`✅ Subjects: ${subMap.size} ta`);
 
   // ── 10. Staff users ────────────────────────────────────────────────────────
-  const adminPw      = await hash('MathAdmin@2025!');
-  const demoPw       = await hash('Demo@1234');
-  const teacherPw    = await hash('Ustoz@2025!');
-  const guardianPw   = await hash('Ota@12345');
-  const demoGuardPw  = await hash('Demo@1234');
+  // Passwords were resolved at module load (see SEED_PASSWORDS above) so that a
+  // production run with missing env aborts before writing anything.
+  const adminPw      = await hash(SEED_PASSWORDS.admin);
+  const demoPw       = await hash(SEED_PASSWORDS.demo);
+  const teacherPw    = await hash(SEED_PASSWORDS.teacher);
+  const guardianPw   = await hash(SEED_PASSWORDS.guardian);
+  const demoGuardPw  = await hash(SEED_PASSWORDS.demo);
 
   async function upsertUser(username: string, pwHash: string, fullName: string, phone?: string) {
     return prisma.users.upsert({
@@ -1197,24 +1268,21 @@ async function main() {
   console.log('\n' + '═'.repeat(60));
   console.log('✅  SEED MUVAFFAQIYATLI YAKUNLANDI!');
   console.log('═'.repeat(60));
-  console.log('\n📌  KIRISH MA\'LUMOTLARI:\n');
-  console.log('🔴  REAL SUPERADMIN (to\'liq huquq):');
-  console.log('    Login    : admin');
-  console.log('    Parol    : MathAdmin@2025!');
-  console.log('    ⚠️  Bu parolni birinchi kirishdan so\'ng o\'zgartiring!\n');
-  console.log('👁️   DEMO SUPERADMIN (faqat ko\'rish):');
-  console.log('    Login    : demo');
-  console.log('    Parol    : Demo@1234\n');
-  console.log('🔴  REAL O\'QITUVCHILAR (to\'liq o\'qituvchi huquqlari):');
-  for (const t of teacherDefs) {
-    console.log(`    ${t.username.padEnd(24)} / Ustoz@2025!`);
+  // Logins are printed; passwords are not. They live in the environment
+  // (SEED_* keys) or, outside production, in .env.example.
+  console.log('\n📌  YARATILGAN HISOBLAR (loginlar):\n');
+  console.log('🔴  SUPERADMIN     : admin                  → SEED_ADMIN_PASSWORD');
+  console.log('👁️   DEMO ADMIN     : demo                   → SEED_DEMO_PASSWORD  (read-only)');
+  console.log(`🔴  O'QITUVCHILAR  : ${teacherDefs.length} ta (teacher.001…)   → SEED_TEACHER_PASSWORD`);
+  console.log('👁️   DEMO O\'QITUVCHI: demo.teacher           → SEED_DEMO_PASSWORD  (read-only)');
+  console.log('👨‍👩‍👧  GUARDIAN       : MA-0001 … MA-0060      → SEED_GUARDIAN_PASSWORD');
+  console.log('👁️   DEMO GUARDIAN  : MA-DEMO                → SEED_DEMO_PASSWORD  (read-only)');
+  console.log('\n    Guardian login formati: <tenant-slug>-<student-id>, masalan mathacademy-MA-0001');
+
+  if (!IS_PRODUCTION) {
+    console.log('\n⚠️   Bu demo parollar. Ular faqat local/demo uchun.');
+    console.log('    Production\'da har bir SEED_* qiymati env orqali berilishi shart.');
   }
-  console.log('\n👁️   DEMO O\'QITUVCHI (faqat ko\'rish):');
-  console.log('    Login    : demo.teacher');
-  console.log('    Parol    : Demo@1234\n');
-  console.log('👨‍👩‍👧  GUARDIAN (ota-ona) AKKAUNTLARI:');
-  console.log('    REAL     : MA-0001 … MA-0060  / Ota@12345');
-  console.log('    DEMO     : MA-DEMO             / Demo@1234');
   console.log('\n' + '═'.repeat(60));
 }
 

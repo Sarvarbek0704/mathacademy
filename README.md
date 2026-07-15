@@ -1,420 +1,271 @@
+<div align="center">
+
 # MathAcademy Digital Campus
 
-Zamonaviy ta'lim muassasalari uchun to'liq raqamli boshqaruv tizimi. O'quvchilar, o'qituvchilar, ota-onalar va ma'muriyat uchun yagona platforma.
+**A multi-tenant Student Information System — running a real academy.**
+
+Students, groups, grades, attendance, timetables, discipline, dormitories, meals, billing and parent access — for many institutions on one deployment, with each institution's data fully isolated from the rest.
+
+[![Multi-tenant](https://img.shields.io/badge/architecture-multi--tenant-6E56CF?style=flat-square)](#multi-tenancy)
+[![NestJS](https://img.shields.io/badge/NestJS-11-e0234e?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![Prisma](https://img.shields.io/badge/Prisma-7.3-2D3748?style=flat-square&logo=prisma&logoColor=white)](https://www.prisma.io/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![React](https://img.shields.io/badge/React-18-61dafb?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+
+[Multi-tenancy](#multi-tenancy) · [Domain](#what-it-actually-does) · [Architecture](#architecture) · [Getting started](#getting-started) · [Security](#security)
+
+</div>
 
 ---
 
-## Mundarija
+## Why this project is not a demo
 
-- [Loyiha haqida](#loyiha-haqida)
-- [Texnologiyalar](#texnologiyalar)
-- [Arxitektura](#arxitektura)
-- [Modullar va imkoniyatlar](#modullar-va-imkoniyatlar)
-- [Boshlash](#boshlash)
-- [Muhit o'zgaruvchilari](#muhit-ozgaruvchilari)
-- [Ma'lumotlar bazasi](#malumotlar-bazasi)
-- [API hujjatlari](#api-hujjatlari)
-- [Foydalanuvchi rollari](#foydalanuvchi-rollari)
-- [Loyiha tuzilmasi](#loyiha-tuzilmasi)
-
----
-
-## Loyiha haqida
-
-**MathAcademy Digital Campus** — ko'p ijarachilik (multi-tenant) arxitekturasida qurilgan, to'liq funksional ta'lim boshqaruv tizimi (LMS/SIS). Tizim uchta asosiy foydalanuvchi turiga xizmat qiladi:
-
-- **Xodimlar (Staff)** — ma'muriyat, o'qituvchilar va operatorlar uchun keng funksional panel
-- **Ota-onalar (Guardian)** — farzandining akademik holati, davomat va to'lovlarini kuzatish
-- **Tizim** — har bir maktab/akademiya o'z tenantiga ega, ma'lumotlar to'liq izolyatsiya qilingan
-
----
-
-## Texnologiyalar
-
-### Backend
-| Texnologiya | Versiya | Maqsad |
-|---|---|---|
-| **NestJS** | 11.0 | Asosiy framework (modular, DI) |
-| **Prisma ORM** | 7.3 | Ma'lumotlar bazasi bilan ishlash |
-| **PostgreSQL** | 15+ | Asosiy ma'lumotlar bazasi |
-| **Redis** | 7+ | Kesh, auth lock, sessiya |
-| **JWT** | — | Autentifikatsiya (access + refresh tokens) |
-| **bcrypt** | 6.0 | Parollarni xeshlash |
-| **Multer** | — | Fayl yuklash (avatar, media) |
-| **Swagger** | 11.2 | API hujjatlari (`/api/docs`) |
-| **class-validator** | — | DTO validatsiyasi |
-
-### Frontend
-| Texnologiya | Versiya | Maqsad |
-|---|---|---|
-| **React** | 18.3 | UI framework |
-| **Vite** | 5.4 | Build tool va dev server |
-| **TypeScript** | 5.x | Type safety |
-| **TailwindCSS** | 3.4 | Utility-first CSS |
-| **shadcn/ui** | — | UI komponentlar kutubxonasi (Radix UI) |
-| **TanStack Query** | 5.x | Server state boshqaruv |
-| **React Router** | 6.x | Client-side routing |
-| **Recharts** | 2.x | Diagrammalar va grafiklar |
-| **Framer Motion** | 12.x | Animatsiyalar |
-| **dayjs** | — | Sana/vaqt boshqaruvi |
-| **Zod** | 3.x | Forma validatsiyasi |
-
----
-
-## Arxitektura
+Most portfolio projects model a domain from the outside. This one was built for the academy its author attended, and it is in daily use by staff and parents. That shows up in the commit history more than anywhere else:
 
 ```
-mathacademy-digital-campus/
-├── apps/
-│   ├── api/                  # NestJS backend
-│   │   ├── src/
-│   │   │   ├── modules/      # 28 ta feature modul
-│   │   │   ├── common/       # Guards, pipes, interceptors
-│   │   │   ├── prisma/       # PrismaService
-│   │   │   └── main.ts
-│   │   └── prisma/
-│   │       ├── schema.prisma # 56 ta model
-│   │       └── seed.ts       # Demo ma'lumotlar
-│   └── web/                  # React frontend
-│       └── src/
-│           ├── pages/
-│           │   ├── staff/    # 30+ xodim sahifalari
-│           │   └── guardian/ # 12 ota-ona sahifasi
-│           ├── components/
-│           │   ├── shared/   # DataTable, PageHeader, SlideOver...
-│           │   └── ui/       # shadcn komponentlari
-│           ├── hooks/        # useCrud, useAuth...
-│           └── lib/          # api.ts, auth.tsx, utils.ts
-└── packages/                 # Shared packages
+fix: guardian login format mismatch — split on first dash, allow MA-XXXX loginId
+fix: guardian timetable shows period number when startsAt is null
+fix: timetable grid and list when lessons have no startsAt/endsAt
+fix: production bugs — timetable dayOfWeek coercion, billing fields, CSV limit
 ```
 
-### Multi-tenant arxitektura
+Nobody writes those commits from a specification. They come from a parent who could not log in, and a timetable that rendered wrong for lessons scheduled by period instead of by clock time. **The edge cases in this codebase were found by users, not imagined.**
 
-Har bir muassasa (`tenant`) o'zining izolyatsiyalangan ma'lumotlariga ega. Barcha so'rovlarda `tenant_id` avtomatik qo'shiladi — bir tenant boshqasining ma'lumotlariga kira olmaydi.
-
-```
-Tenant A (mathacademy) ──► o'z o'quvchilari, guruhlari, to'lovlari
-Tenant B (another-school) ──► to'liq izolyatsiya
-```
-
----
-
-## Modullar va imkoniyatlar
-
-### Xodimlar paneli (Staff)
-
-#### Akademik boshqaruv
-- **O'quvchilar** — to'liq profil, guruhga qo'shish, avatar yuklash, shaxsiy sahifa (baholar, davomat, intizom, to'lovlar tarixi)
-- **Guruhlar** — sinf/guruh boshqaruvi, o'quvchilarni qo'shish/o'chirish, fanlar bog'lash
-- **Akademik yillar** — o'quv yili boshqaruvi
-- **Fanlar** — fan katalogi va boshqaruvi
-- **Yo'nalishlar (Tracks)** — o'quvchi yo'nalishlari
-- **Kohortlar** — o'quvchilarni guruhlash (abituriyentlar, iqtidorlilar va h.k.)
-
-#### Baholar va natijalar
-- **Baholashlar (Assessments)** — turli turdagi imtihonlar: `REGULAR`, `BLOCK_TEST`, `MOCK_EXAM`, `FINAL`
-  - BLOCK_TEST uchun 189 ballik maxsus tizim (matematika + ingliz + majburiy fanlar)
-  - Guruhga ko'ra fanlarni avtomatik filtrlash
-- **Reyting (Ranking)** — guruh bo'yicha o'quvchilar reytingi, ballar matritsasi
-- **Sertifikatlar** — IELTS, SAT, olimpiada natijalari, kirish natijalari (`EARLY_ADMITTED`, `ON_TIME_ADMITTED`, `NOT_ADMITTED`)
-
-#### Davomat
-- **Dars jadvali (Timetable)** — haftalik grid va ro'yxat ko'rinishi, davomatni to'g'ridan-to'g'ri jadvaldan belgilash
-- **Davomat** — sessiyalar bo'yicha, guruh bo'yicha, sanalar bo'yicha filtrlash
-
-#### Intizom
-- **Qoidabuzarliklar (Violations)** — intizom buzilishlarini qayd etish
-- **Intizom choralari (Discipline Actions)** — choralar va ularning statusi
-- **Ta'tillar (Leaves)** — sababli/sababsiz dars qoldirish so'rovlari
-
-#### Moliya
-- **Hisob-fakturalar (Invoices)** — to'lov majburiyatlari, muddatlar
-- **To'lovlar (Payments)** — to'lov tarixi, naqd/karta/o'tkazma usullari
-- **Billing** — oylik daromad diagrammasi, statistika
-- **Yotoqxona billing** — yotoqxona to'lovlari
-- **Ovqatlanish billing** — kunlik ovqatlanish to'lovlari
-
-#### Infratuzilma
-- **Yotoqxonalar (Dorms)** — bino va xonalar boshqaruvi, o'quvchilarni jinstosh xonalarga joylashtirish
-- **Kampuslar** — jismoniy manzillar, xarita integratsiyasi
-- **Dars jadvali** — jadval yaratish va tahrirlash, haftalik ko'rinish
-
-#### Kommunikatsiya
-- **Tadbirlar (Events)** — maktab tadbirlari va ishtirokchilar
-- **E'lonlar (Announcements)** — xodimlar, o'quvchilar yoki ota-onalarga yo'naltirilgan xabarlar
-- **Bildirishnomalar (Notifications)** — push va in-app bildirishnomalar
-- **Mukofotlar (Awards)** — stipendiyalar, sertifikatlar, kuboklar
-- **Musobaqalar (Competitions)** — olimpiada va musobaqalar, natijalar
-
-#### Tizim
-- **Rollar va ruxsatlar (RBAC)** — granular huquqlar tizimi
-- **Foydalanuvchilar** — xodimlar ro'yxati va boshqaruvi
-- **Hisobotlar (Reports)** — umumiy statistika, to'lov intizomi
-- **Media markaz** — fayllar va rasm yuklash
-- **Ekranlar (Displays)** — axborot ekranlari uchun kontent boshqaruvi
-
-### Ota-onalar paneli (Guardian)
-
-| Sahifa | Tavsif |
+| | |
 |---|---|
-| **Dashboard** | Umumiy holat: baholar, davomat, oxirgi xabarlar |
-| **O'quvchi profili** | Shaxsiy ma'lumotlar, guruh, yo'nalish |
-| **Baholar** | Barcha imtihon natijalari va statistika |
-| **Davomat** | Oylik davomat tarixi va foiz |
-| **Intizom** | Qoidabuzarliklar va choralar |
-| **To'lovlar** | Hisob-fakturalar va to'lov tarixi |
-| **Tadbirlar** | Kelgusi va o'tgan tadbirlar |
-| **Dars jadvali** | Haftalik dars jadvali |
-| **Sertifikatlar** | O'quvchi sertifikatlari |
-| **E'lonlar** | Maktabdan xabarlar |
-| **Bildirishnomalar** | Push bildirishnomalar |
+| **69** database models | **28** feature modules |
+| **37** controllers · **32** services · **128** DTOs | **48** UI pages (36 staff · 12 guardian) |
+| **62,800** lines of TypeScript | **51** commits |
 
 ---
 
-## Boshlash
+## Multi-tenancy
 
-### Talablar
+This is the architectural centre of the project, so it goes first.
 
-- Node.js 18+
-- PostgreSQL 15+
-- Redis 7+
-- pnpm 9+ (yoki npm/yarn)
+One deployment serves many institutions. Every tenant-scoped table carries a `tenant_id`, and the tenant is resolved from the authenticated user's JWT — never from a client-supplied parameter.
 
-### O'rnatish
+```
+Tenant A (mathacademy)     ──► its own students, groups, grades, invoices
+Tenant B (another-school)  ──► fully isolated — different rows, same tables
+```
+
+**29 of 30 services scope every query by `tenant_id`.** The one that does not is `tenants.service.ts`, which manages the tenants themselves and is deliberately global.
+
+Requests carry the tenant implicitly:
+
+```ts
+// The tenant comes from the verified JWT, never from the request body or query.
+const tenant_id = toBigInt(args.tenantId, 'tenantId');
+
+const students = await this.prisma.students.findMany({
+  where: { tenant_id, group_id },   // ← every query, without exception
+});
+```
+
+**Identifiers are `BigInt`, not `number`.** A 64-bit primary key does not survive `JSON.parse` — JavaScript silently loses precision past 2⁵³. The project handles this explicitly rather than hoping IDs stay small:
+
+- `parse-bigint.pipe.ts` — converts route params at the edge
+- `is-bigint-string.decorator.ts` — validates BigInt-shaped strings in DTOs
+- `bigint.util.ts` — a single conversion path with a single failure mode
+
+### Known limitation — stated honestly
+
+Tenant scoping is currently applied **by hand at every call site**: 121 `findMany` and 55 `findUnique` calls, each remembering to include `tenant_id`. That is 176 chances to forget, and one forgotten filter is one school reading another's data.
+
+A `withTenantCondition()` helper exists in `common/utils/tenant.util.ts` — it injects `tenant_id` automatically and rejects mismatches — but **it is not yet wired into the services**. Moving the guarantee from discipline to structure (a Prisma client extension that scopes every query at the data layer) is the next piece of work. See [Roadmap](#roadmap).
+
+---
+
+## What it actually does
+
+### Academic
+
+- **Students** — full profile, group assignment, avatars, and a per-student page pulling together grades, attendance, discipline and payment history
+- **Groups, academic years, subjects, tracks, cohorts** — the structural backbone; tracks bind subjects to a student's stream, cohorts group students across groups (applicants, high-achievers, …)
+- **Assessments** — `REGULAR`, `BLOCK_TEST`, `MOCK_EXAM`, `FINAL`. Block tests use a 189-point scheme (mathematics + English + required subjects) with subjects auto-filtered by the student's group
+- **Ranking** — per-group standings and a score matrix
+- **Certificates** — IELTS, SAT, olympiad and admission outcomes (`EARLY_ADMITTED`, `ON_TIME_ADMITTED`, `NOT_ADMITTED`)
+
+### Attendance & timetable
+
+- **Timetable** — weekly grid and list views; lessons may be scheduled by clock time *or* by period number, and both render correctly
+- **Attendance** — marked directly from the timetable, filterable by session, group and date
+
+### Discipline
+
+- **Violations** and **discipline actions** with status tracking
+- **Leave requests** — excused and unexcused absence
+
+### Finance
+
+- **Invoices and payments** — obligations, due dates, cash / card / transfer
+- **Billing** — monthly revenue charts and statistics
+- **Dormitory and meal billing** — separate charge streams with their own payment announcements
+
+### Campus operations
+
+- **Dormitories** — buildings, rooms, and gender-aware room placement
+- **Campuses** — physical locations with map integration
+- **Displays** — playlist-driven content for information screens around the building
+
+### Communication
+
+- **Events** with participant lists · **Announcements** targeted at staff, students or guardians · **Notifications** with per-user preferences and templates · **Awards** · **Competitions** with entries and results
+
+### Guardian portal
+
+Twelve pages giving parents exactly what they ask the front desk for: dashboard, student profile, grades, attendance, discipline, payments, events, timetable, certificates, announcements and notifications.
+
+Guardians authenticate with `<tenant-slug>-<student-id>` — for example `mathacademy-MA-0001`. That format is why one of the fixes above exists: splitting on the *first* dash rather than the last.
+
+---
+
+## Architecture
+
+```
+mathacademy/
+├── apps/
+│   ├── api/                        NestJS 11
+│   │   ├── prisma/
+│   │   │   ├── schema.prisma       69 models
+│   │   │   ├── migrations/         real migrations — never `db push`
+│   │   │   └── seed.ts             demo data (guarded — see Security)
+│   │   └── src/
+│   │       ├── modules/            28 feature modules
+│   │       └── common/
+│   │           ├── guards/         access · roles · perms
+│   │           ├── pipes/          parse-bigint
+│   │           ├── decorators/     @Roles · @Perms · @ParamBigInt
+│   │           ├── filters/        all-exceptions
+│   │           ├── utils/          tenant · bigint · audit · prisma-error
+│   │           └── config/         env.validation
+│   └── web/                        React 18 + Vite
+│       └── src/
+│           ├── pages/staff/        36 pages
+│           ├── pages/guardian/     12 pages
+│           ├── components/shared/  DataTable · SlideOver · StatCard · StatusBadge
+│           ├── hooks/              useCrud · useAuth
+│           └── lib/                api · auth · utils
+└── render.yaml
+```
+
+### Migrations, not `db push`
+
+The schema is versioned in `prisma/migrations/`. Deployment runs `prisma migrate deploy`; the database is never mutated by a framework guessing at the diff. This matters once a system holds real student records.
+
+### RBAC beyond roles
+
+Roles alone cannot express *"a teacher may enter grades, but only for their own groups."* The `rbac` module separates **permissions**, **roles** and **user-roles**, so permission sets are data rather than code — an administrator composes new roles from the panel without a deploy.
+
+```
+superadmin   → everything
+admin        → management, minus destructive operations
+teacher      → their own groups: grades, attendance
+receptionist → students and payments (read / create)
+accountant   → finance modules
+```
+
+### The frontend avoids forty-eight variations of the same page
+
+`useCrud` is a single hook covering pagination, search, create, update and delete; `DataTable` renders any list with search and custom cells; `SlideOver` hosts every create/edit form. Forty-eight pages exist because the domain has forty-eight things in it — not because forty-eight pages were written by hand.
+
+---
+
+## Tech stack
+
+| Backend | | Frontend | |
+|---|---|---|---|
+| NestJS | 11 | React | 18.3 |
+| Prisma | 7.3 | Vite | 5.4 |
+| PostgreSQL | 15+ | TypeScript | 5.7 |
+| Redis | 7+ | Tailwind CSS | 3.4 |
+| JWT (access + refresh) | — | shadcn/ui (Radix) | — |
+| bcrypt | 6.0 | TanStack Query | 5.83 |
+| Swagger / OpenAPI | 11.2 | Recharts · Framer Motion | — |
+| class-validator | — | Zod · dayjs | — |
+
+Redis is used for caching, session storage and **authentication locks** — repeated failed logins lock the account rather than merely slowing it down.
+
+---
+
+## Getting started
+
+**Requirements:** Node 18+ · PostgreSQL 15+ · Redis 7+
 
 ```bash
-# Repozitoriyni klonlash
-git clone https://github.com/Sarvarbek0704/mathacademy_2.git
-cd mathacademy_2
-
-# Barcha bog'liqliklarni o'rnatish
+git clone https://github.com/Sarvarbek0704/mathacademy.git
+cd mathacademy
 npm install
 ```
 
-### Backend sozlash
+**API**
 
 ```bash
 cd apps/api
-
-# .env faylini yaratish
-cp .env.example .env
-# .env faylini tahrirlang (PostgreSQL, Redis, JWT kalitlari)
-
-# Ma'lumotlar bazasini migratsiya qilish
+cp .env.example .env          # fill in DATABASE_URL, Redis, JWT secrets
 npx prisma migrate deploy
-
-# Demo ma'lumotlarni yuklash
-npm run seed
+npm run seed                  # demo data — local only, see Security
 ```
 
-### Frontend sozlash
+**Web**
 
 ```bash
 cd apps/web
-
-# .env faylini yaratish
-echo "VITE_API_URL=http://localhost:3000" > .env.local
+echo "VITE_API_URL=http://localhost:4000" > .env.local
 ```
 
-### Ishga tushirish
+**Run**
 
 ```bash
-# Loyiha ildizidan (ikkala server ham parallel)
-npm run dev:api    # Backend: http://localhost:3000
-npm run dev:web    # Frontend: http://localhost:5173
+npm run dev:api    # http://localhost:4000  · Swagger at /api/docs
+npm run dev:web    # http://localhost:5173
 ```
+
+The seed prints the logins it creates. Passwords come from `SEED_*` variables in `.env`; outside production they fall back to the documented demo values.
 
 ---
 
-## Muhit o'zgaruvchilari
+## Security
 
-### Backend (`apps/api/.env`)
+### The seed is guarded, and here is why
 
-```env
-# Ma'lumotlar bazasi
-DATABASE_URL="postgresql://user:password@localhost:5432/mathacademy"
+An earlier revision of this repository hardcoded the seed passwords **and published them in this README**, while a `seed:prod` script pointed at that same seed. Anyone reading the repository could have signed in as superadmin on a seeded production instance.
 
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
+That is fixed, structurally:
 
-# JWT
-JWT_ACCESS_SECRET=your-super-secret-access-key
-JWT_REFRESH_SECRET=your-super-secret-refresh-key
-JWT_ACCESS_EXPIRES_IN=15m
-JWT_REFRESH_EXPIRES_IN=7d
+1. **`NODE_ENV=production` aborts the seed** unless `ALLOW_SEED=true` is set explicitly.
+2. **Passwords come from the environment.** Demo fallbacks apply outside production only; in production a missing `SEED_*` value stops the run **before the first database write**, so a partial seed is impossible.
+3. **`seed:prod` no longer exists.** Deployment runs `prisma migrate deploy` and nothing else.
+4. **No passwords in this README.** The seed prints logins; it does not print secrets.
 
-# Cookie
-COOKIE_DOMAIN=localhost
-COOKIE_SECURE=false
+The lesson is worth stating plainly: the danger was never one weak password. It was a convenience script that made that password *reachable* from a public document.
 
-# Fayl yuklash
-UPLOAD_MAX_SIZE_MB=25
-UPLOAD_DIR=./uploads
+### Everything else
 
-# Swagger (production da false)
-SWAGGER_ENABLED=true
-
-# CORS
-CORS_ORIGINS=http://localhost:5173
-```
-
-### Frontend (`apps/web/.env.local`)
-
-```env
-VITE_API_URL=http://localhost:3000
-```
+- **JWT** — 15-minute access, 30-day refresh, hashed at rest
+- **Auth locks** — failed attempts recorded in `auth_attempts`, enforced via `auth_locks` and Redis
+- **Audit log** — `audit_logs` records who changed what and when; the reason a grade or an invoice changed is answerable
+- **bcrypt** — cost 12
+- **Env validation** — `env.validation.ts` refuses to boot on bad configuration rather than failing in production three weeks later
+- **CORS** — explicit allow-list
 
 ---
 
-## Ma'lumotlar bazasi
+## Roadmap
 
-### Asosiy modellar (56 ta)
+An honest list of what is not done.
 
-```
-Tenant boshqaruvi:     tenants, system_settings
-Foydalanuvchilar:      users, roles, permissions, user_roles
-O'quvchilar:           students, student_accounts, student_tracks
-                       student_group_history, student_living_history
-                       student_outcomes, student_risk_scores, student_timeline
-Akademik:              groups, academic_years, subjects, track_subjects
-                       cohorts, student_cohort
-Baholash:              assessments, assessment_scores
-                       grade_snapshots, grade_snapshot_rows
-Davomat:               attendance_sessions, attendance_marks
-Dars jadvali:          timetable, timetable_lessons
-Intizom:               discipline_actions, violations
-Ta'til:                leave_requests
-Moliya:                invoices, payments
-Yotoqxona:             dorms, dorm_rooms, dorm_student_charges
-                       dorm_payment_announcements
-Ovqatlanish:           meal_weeks, meal_student_charges
-                       meal_payment_announcements
-Infratuzilma:          campuses, living_types
-Kommunikatsiya:        events, event_participants
-                       announcements, notifications
-                       notification_preferences, notification_templates
-Mukofotlar:            awards, award_recipients
-Musobaqalar:           competitions, competition_entries, competition_results
-Sertifikatlar:         certificates
-Ekranlar:              displays, display_playlists, display_items
-Fayllar:               files
-Xavfsizlik:            audit_logs, auth_attempts, auth_locks, auth_sessions
-Yordamchi:             student_id_sequences
-```
-
-### Seed ma'lumotlar
-
-Demo ma'lumotlar yuklangandan keyin quyidagi hisoblar mavjud:
-
-| Rol | Login | Parol | Izoh |
-|---|---|---|---|
-| **Superadmin** | `mathacademy` / `admin` | `MathAdmin@2025!` | To'liq huquq |
-| **Demo admin** | `mathacademy` / `demo` | `Demo@1234` | Faqat ko'rish |
-| **O'qituvchi** | `mathacademy` / `teacher.001` | `Ustoz@2025!` | 10 ta o'qituvchi (001–010) |
-| **Demo o'qituvchi** | `mathacademy` / `demo.teacher` | `Demo@1234` | Faqat ko'rish |
-| **Guardian (ota-ona)** | `mathacademy-MA-0001` | `Ota@12345` | 60 ta (MA-0001 … MA-0060) |
-| **Demo guardian** | `mathacademy-MA-DEMO` | `Demo@1234` | Demo ota-ona |
-
-> **Izoh:** Guardian login formatida tenant slug ham kiritiladi: `mathacademy-MA-0001`
-
----
-
-## API hujjatlari
-
-Backend ishga tushgandan keyin Swagger UI mavjud:
-
-```
-http://localhost:3000/api/docs
-```
-
-### Asosiy endpoint guruhlar
-
-| Prefix | Tavsif |
+| | Why it matters |
 |---|---|
-| `POST /auth/staff/login` | Xodim kirishi |
-| `POST /auth/guardian/login` | Ota-ona kirishi |
-| `POST /auth/refresh` | Token yangilash |
-| `GET /staff/students` | O'quvchilar ro'yxati |
-| `GET /staff/groups` | Guruhlar |
-| `GET /staff/assessments` | Baholashlar |
-| `GET /staff/attendance/sessions` | Davomat sessiyalari |
-| `GET /staff/timetables/:id` | Dars jadvali |
-| `GET /staff/billing/summary` | Moliyaviy xulosa |
-| `GET /staff/reports/overview` | Umumiy hisobot |
-| `GET /guardian/dashboard` | Ota-ona dashboard |
-| `GET /guardian/timetable` | Farzand dars jadvali |
+| **Structural tenant isolation** | Move `tenant_id` injection into a Prisma client extension. Today 176 call sites each remember it by hand; one lapse leaks data between schools. Highest-value change in the project |
+| **Tenant-isolation test** | *"A user from tenant A cannot read tenant B's data"* is the single test this system most needs, and it does not exist yet |
+| **Test coverage** | Effectively zero. The correctness of 176 tenant-scoped queries currently rests on review alone |
+| **Wire up or delete `tenant.util.ts`** | Dead code that looks like a safeguard is worse than no safeguard |
 
 ---
 
-## Foydalanuvchi rollari
+## License
 
-### RBAC (Role-Based Access Control)
-
-Tizim granular huquqlar tizimiga ega. Har bir rol o'ziga xos ruxsatlar to'plamiga ega:
-
-```
-superadmin   → barcha huquqlar
-admin        → boshqaruv (o'chirish huquqisiz)
-teacher      → o'z guruhlari: baholar, davomat
-receptionist → o'quvchilar, to'lovlar (faqat ko'rish/kiritish)
-accountant   → moliya modullari
-```
-
-Rollar va ruxsatlar dinamik — admin paneli orqali yangi rollar yaratish va huquqlarni sozlash mumkin.
-
----
-
-## Asosiy texnik xususiyatlar
-
-### Xavfsizlik
-- **JWT** access (15 daqiqa) + refresh (7 kun) token strategiyasi
-- **Brute-force himoya** — noto'g'ri urinishlar soniga qarab hisobni qulflash
-- **Audit log** — barcha muhim amallar qayd etiladi (kim, qachon, nima)
-- **bcrypt** parol xeshlash (cost factor 10+)
-- **CORS** — faqat ruxsat etilgan originlardan so'rovlar
-
-### Unumdorlik
-- **Redis** kesh — tez-tez so'raladigan ma'lumotlar keshlash
-- **Pagination** — barcha ro'yxat endpointlarida sahifalash
-- **Lazy loading** — frontend komponentlari kerak bo'lganda yuklanadi
-
-### Frontend
-- **useCrud hook** — barcha CRUD operatsiyalari uchun universal hook (pagination, search, create, update, delete)
-- **DataTable** — universal jadval komponenti (search, pagination, custom render)
-- **SlideOver** — forma paneli (create/edit uchun)
-- **StatusBadge** — holat ko'rsatuvchi badge (ACTIVE, PENDING, PAID, va h.k.)
-- **StatCard** — statistika kartasi
-
----
-
-## Deploy
-
-### Render.com (Backend)
-
-1. `apps/api` papkasini web service sifatida ulang
-2. Build command: `npm install && npx prisma generate && npm run build`
-3. Start command: `node dist/main`
-4. Muhit o'zgaruvchilarini Render dashboard orqali kiriting
-
-### Vercel (Frontend)
-
-1. `apps/web` papkasini Vercel loyihasiga ulang
-2. Build command: `npm run build`
-3. Output directory: `dist`
-4. `VITE_API_URL` muhit o'zgaruvchisini kiriting
-
-### Ma'lumotlar bazasi
-
-Render Postgres yoki Supabase bilan ishlaydi. Birinchi deploydan keyin:
-
-```bash
-npx prisma migrate deploy
-npm run seed:prod   # Minimal boshlang'ich ma'lumotlar
-```
-
----
-
-## Litsenziya
-
-Bu loyiha xususiy (private) bo'lib, Sarvarbek0704 tomonidan ishlab chiqilgan.
+Proprietary. Built by [Sarvarbek Sodiqov](https://github.com/Sarvarbek0704) for a working academy; published for review, not for reuse.
