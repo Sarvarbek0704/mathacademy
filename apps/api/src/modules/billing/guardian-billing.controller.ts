@@ -1,9 +1,8 @@
 // apps/api/src/modules/billing/guardian-billing.controller.ts
 import {
-  Body,
   Controller,
   Get,
-  Param,
+  NotImplementedException,
   Post,
   Req,
   UnauthorizedException,
@@ -63,22 +62,35 @@ export class GuardianBillingController {
     return this.service.guardianPayments(tenantId, studentAccountId);
   }
 
+  /**
+   * Disabled: this recorded a payment without taking one.
+   *
+   * No payment provider is integrated anywhere in this codebase. The handler
+   * wrote a payments row from a client-supplied amount, recalculated the
+   * total, and marked the invoice PAID — cascading to meal_student_charges
+   * and dorm_student_charges. A guardian could therefore clear their own
+   * child's balance by calling it, and the academy's books would show money
+   * that was never received.
+   *
+   * It stays here, returning 501, rather than being deleted: the route is
+   * already wired into the guardian UI, and a 501 is an honest answer where
+   * a 404 would look like a routing mistake.
+   *
+   * Restore this only together with a real provider. docs/09-billing-and-
+   * finance.md §10 covers the integration; note that Payme settles in whole
+   * tiyin and Click in fractional som, so the amount must come from the
+   * provider's callback and never from the request body.
+   */
   @Post('invoices/:id/pay')
-  @ApiOperation({ summary: 'Submit an online payment for an invoice' })
-  @ApiResponse({ status: 201, description: 'Payment recorded' })
-  payInvoice(
-    @Req() req: any,
-    @Param('id') invoiceId: string,
-    @Body() body: { paidAmount: number; method?: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER' },
-  ) {
-    const { tenantId, studentAccountId } = this.getGuardianInfo(req);
-    return this.service.guardianPayInvoice(
-      tenantId,
-      studentAccountId,
-      invoiceId,
-      Number(body.paidAmount),
-      body.method ?? 'CARD',
-    );
+  @ApiOperation({
+    summary: 'Disabled — online payment is not implemented',
+    description:
+      'Returns 501. No payment provider is integrated; the previous implementation ' +
+      'marked invoices paid without receiving money. See docs/09-billing-and-finance.md.',
+  })
+  @ApiResponse({ status: 501, description: 'Online payment is not available' })
+  payInvoice() {
+    throw new NotImplementedException('ONLINE_PAYMENT_NOT_AVAILABLE');
   }
 
   @Get('summary')
