@@ -86,11 +86,20 @@ function seedPassword(envKey: string, devFallback: string): string {
  * SEED_* value would therefore half-seed the database and only then abort.
  * Failing before the first query keeps the operation all-or-nothing.
  */
+/**
+ * The fallbacks are deliberately not passwords anyone would set. An earlier
+ * revision reused the real seeded credentials here — which put a string that
+ * may still authenticate against a live deployment into a public file, in the
+ * same repository whose own history is the reason this guard exists.
+ *
+ * A local fallback only has to start a dev database. It must never be
+ * something that could also open production.
+ */
 const SEED_PASSWORDS = {
-  admin: seedPassword('SEED_ADMIN_PASSWORD', 'MathAdmin@2025!'),
-  demo: seedPassword('SEED_DEMO_PASSWORD', 'Demo@1234'),
-  teacher: seedPassword('SEED_TEACHER_PASSWORD', 'Ustoz@2025!'),
-  guardian: seedPassword('SEED_GUARDIAN_PASSWORD', 'Ota@12345'),
+  admin: seedPassword('SEED_ADMIN_PASSWORD', 'local-dev-admin-do-not-deploy'),
+  demo: seedPassword('SEED_DEMO_PASSWORD', 'local-dev-demo-do-not-deploy'),
+  teacher: seedPassword('SEED_TEACHER_PASSWORD', 'local-dev-teacher-do-not-deploy'),
+  guardian: seedPassword('SEED_GUARDIAN_PASSWORD', 'local-dev-guardian-do-not-deploy'),
 } as const;
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });

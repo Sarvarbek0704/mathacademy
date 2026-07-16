@@ -124,23 +124,36 @@ async function bootstrap() {
 
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Mathacademy Digital Campus API')
-    .setVersion('1.0.0')
-    .addBearerAuth(
-      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-      'access-token',
-    )
-    .build();
+  // ENABLE_SWAGGER used to be declared in .env.example and never read here, so
+  // setting it to "false" did nothing and /api/docs was served in production —
+  // publishing every route and DTO to anyone who asked. Default off in
+  // production, on everywhere else.
+  const swaggerEnabled =
+    process.env.ENABLE_SWAGGER !== undefined
+      ? process.env.ENABLE_SWAGGER === 'true'
+      : isDev;
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup(`${globalPrefix}/docs`, app, document, {
-    swaggerOptions: { persistAuthorization: true },
-  });
+  if (swaggerEnabled) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Mathacademy Digital Campus API')
+      .setVersion('1.0.0')
+      .addBearerAuth(
+        { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        'access-token',
+      )
+      .build();
+
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup(`${globalPrefix}/docs`, app, document, {
+      swaggerOptions: { persistAuthorization: true },
+    });
+  }
 
   await app.listen(port);
   console.log(`Server started on http://localhost:${port}/api`);
-  console.log(`Swagger started on http://localhost:${port}/api/docs`);
+  if (swaggerEnabled) {
+    console.log(`Swagger started on http://localhost:${port}/api/docs`);
+  }
 }
 
 bootstrap();

@@ -17,7 +17,7 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "//test:e2e": "Removed: it pointed at ./test/jest-e2e.json, which does not exist, so the script only ever failed. The e2e setup is specified in docs/13-testing-strategy.md and this script comes back with it.",
     "seed": "ts-node --transpile-only ./prisma/seed.ts",
     "//seed:note": "There is deliberately no seed:prod script. The seed creates privileged accounts and is for local/demo use. With NODE_ENV=production it aborts unless ALLOW_SEED=true and every SEED_* password is supplied via env — see prisma/seed.ts.",
     "migrate:deploy": "npx prisma migrate deploy"
