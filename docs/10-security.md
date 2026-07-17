@@ -9,7 +9,7 @@
 
 ## 0. Bu hujjat nima haqida
 
-MathAcademy — **DEMO EMAS**. U real akademiyada, real xodimlar va real ota-onalar
+Ziyo — **DEMO EMAS**. U real akademiyada, real xodimlar va real ota-onalar
 tomonidan har kuni ishlatiladi. Bazada saqlanadigan narsalar ro'yxati bu hujjatning
 ohangini belgilaydi:
 
@@ -222,7 +222,7 @@ $ curl -d '{"studentId":"mathacademy-MA-0001","password":"x"}' .../api/auth/guar
 {"statusCode":401,"message":"INVALID_CREDENTIALS"}       ← akademiya BOR ✓
 ```
 
-**Nega bu muhim (§1.2 H1 — raqib akademiya):** MathAcademy SaaS'ga aylanganda
+**Nega bu muhim (§1.2 H1 — raqib akademiya):** Ziyo SaaS'ga aylanganda
 (kanon §7) mijozlar ro'yxati — **tijorat siri**. Raqib lug'at bo'yicha slug sanab,
 platformadagi **barcha akademiyalarni** aniqlay oladi. Bu H1 ning birinchi qadami:
 avval kimga hujum qilishni bilish kerak.
@@ -2137,7 +2137,7 @@ ochish (manba: gazeta.uz, kun.uz, 2026-03-27/28).
 - 2026 o'zgarishi: https://kun.uz/en/news/2026/03/27/uzbekistan-amends-personal-data-law-to-facilitate-global-payment-systems
 - https://www.gazeta.uz/oz/2026/03/28/personal-data/
 
-### 11.2. ⚠️ MathAcademy uchun asosiy savol: surat = biometrik ma'lumotmi?
+### 11.2. ⚠️ Ziyo uchun asosiy savol: surat = biometrik ma'lumotmi?
 
 Bu **eng muhim ochiq savol** va u yurist uchun.
 
@@ -2149,7 +2149,7 @@ Vaziyat:
 
 **Nozik nuqta:** ko'p yurisdiksiyada (masalan, GDPR Art. 9) oddiy fotosurat
 **biometrik ma'lumot hisoblanmaydi** — u faqat **biometrik identifikatsiya
-maqsadida texnik qayta ishlansa** biometrik bo'ladi. MathAcademy suratlarni
+maqsadida texnik qayta ishlansa** biometrik bo'ladi. Ziyo suratlarni
 identifikatsiya uchun **ishlatmaydi** — ular shunchaki profil rasmi
 (`files.service.ts:422` — `STUDENT_PHOTO` bitta rasm qoidasi).
 
@@ -2213,7 +2213,7 @@ savol.
   Uzkomnazorat rahbarini ishdan bo'shatdi
 - 2022-08-01 — ko'pchiligi blokdan chiqarildi
 
-**Ochiq savol:** MathAcademy ma'lumotlar bazasi Davlat reyestrida ro'yxatdan
+**Ochiq savol:** Ziyo ma'lumotlar bazasi Davlat reyestrida ro'yxatdan
 o'tganmi? Bu — **ha/yo'q** savoli va javob shu hujjatga yozilishi kerak.
 2026 o'zgarishi ro'yxatdan o'tish talabini ham o'zgartirganmi — **tasdiqlanmagan**.
 
@@ -2236,7 +2236,7 @@ o'tganmi? Bu — **ha/yo'q** savoli va javob shu hujjatga yozilishi kerak.
 7. Buzilish sodir bo'lsa — **kimga, qancha muddatda** xabar berish shart?
    (§13 runbook uchun aniq raqam kerak)
 8. Ko'p ijarachilik (multi-tenant) — har bir akademiya alohida "operator"mi,
-   yoki MathAcademy operatormi, akademiyalar — "qayta ishlovchi"mi? Bu SaaS'ga
+   yoki Ziyo operatormi, akademiyalar — "qayta ishlovchi"mi? Bu SaaS'ga
    o'tishda hal qiluvchi (kanon §7)
 
 ---

@@ -1,6 +1,6 @@
-# MathAcademy Digital Campus — Mahsulot spetsifikatsiyasi
+# Ziyo — Mahsulot spetsifikatsiyasi
 
-> **Loyiha:** MathAcademy Digital Campus — ko'p ijarachilik (multi-tenant) Student Information System
+> **Loyiha:** Ziyo — ko'p ijarachilik (multi-tenant) Student Information System
 > **Hujjat:** 01 — Product Specification · **Holat:** Draft v1
 > **Muallif:** Sarvarbek Sodiqov · **Kanon:** [`CANON.md`](./CANON.md) (ziddiyat bo'lsa — kanon g'olib)
 
@@ -845,7 +845,7 @@ Ataylab qilinmaydigan narsalar. Bu ro'yxat qilinadiganlar ro'yxatidan **kam emas
 **Yo'q:** kurs kontenti, video dars, uy vazifasi topshirish, avtomatik tekshiruv, SCORM,
 o'quvchi ↔ o'qituvchi chat.
 
-*Sabab:* MathAcademy o'qitish **jarayonini** emas, o'qitish **faktini** yozadi. Dars sinfda,
+*Sabab:* Ziyo o'qitish **jarayonini** emas, o'qitish **faktini** yozadi. Dars sinfda,
 jonli, o'qituvchi bilan o'tadi — akademiya modeli aynan shu. `assessments` — bahoni **yozadi**,
 imtihon **o'tkazmaydi**. Bu chegara buzilsa, tizim Moodle bilan raqobatlashadi va o'zining
 haqiqiy kuchini — yotoqxona, ovqat, intizom, DTM, outcome — yo'qotadi.
@@ -873,7 +873,7 @@ beradi?) va bu **yurist savoli**, texnik qaror emas.
 rassilka.
 
 *Sabab:* Kanon §7 — bozorda o'quv markazi CRM'lari bor (WeWork, EducationCRM, CRM Edu,
-univ.uz) va ular aynan shuni qiladi. MathAcademy **qabul qilingan** o'quvchidan boshlanadi.
+univ.uz) va ular aynan shuni qiladi. Ziyo **qabul qilingan** o'quvchidan boshlanadi.
 Bu raqobatdan qochish emas — **boshqa mahsulot bo'lish**.
 
 ### 5.5. Bu HEMIS o'rnini bosmaydi

@@ -6,7 +6,7 @@
 
 ## Kontekst
 
-MathAcademy — davomat va to'lovni hisoblaydigan CRM emas. U **DTM'ga
+Ziyo — davomat va to'lovni hisoblaydigan CRM emas. U **DTM'ga
 tayyorlaydigan akademiya** uchun qurilgan, va **DTM 189 ballik tizimi —
 akademiyaning mavjudlik sababi**. Agar bu qoida noto'g'ri bo'lsa, qolgan 62 783
 qator kodning ma'nosi yo'q.

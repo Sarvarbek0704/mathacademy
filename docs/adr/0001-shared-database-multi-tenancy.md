@@ -6,7 +6,7 @@
 
 ## Kontekst
 
-MathAcademy — **ko'p ijarachilik (multi-tenant) Student Information System**. Bu
+Ziyo — **ko'p ijarachilik (multi-tenant) Student Information System**. Bu
 demo emas: tizim muallif o'qigan akademiyada real xodimlar va ota-onalar tomonidan
 har kuni ishlatiladi. Ma'lumot — **voyaga yetmagan o'quvchilarniki**.
 

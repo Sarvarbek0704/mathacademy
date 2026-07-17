@@ -1,4 +1,4 @@
-# MathAcademy Digital Campus — Texnik topshiriq (TZ)
+# Ziyo — Texnik topshiriq (TZ)
 
 > Ko'p ijarachilik (multi-tenant) Student Information System.
 >

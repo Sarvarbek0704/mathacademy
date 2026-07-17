@@ -9,7 +9,7 @@
 
 ## 0. Bu hujjat nima uchun
 
-MathAcademy — **ishlab turgan tizim**. Har kuni real xodimlar va ota-onalar ishlatadi.
+Ziyo — **ishlab turgan tizim**. Har kuni real xodimlar va ota-onalar ishlatadi.
 Shuning uchun bu hujjat **"qanday qurish kerak edi"** haqida emas, **"hozir qanday qurilgan,
 nega shunday, va nimani xavfsiz yaxshilash mumkin"** haqida.
 
@@ -58,7 +58,7 @@ model StudentTrack {
 }
 ```
 
-MathAcademy'da esa:
+Ziyo'da esa:
 
 ```prisma
 // apps/api/prisma/schema.prisma:885 — MAVJUD HOLAT

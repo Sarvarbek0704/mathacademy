@@ -11,7 +11,7 @@ hisoblab, o'zgartirib qo'yadi. Keyin o'sha muammoga qaytadan duch keladi.
 
 ADR **niyatni** saqlaydi, kod esa faqat **natijani** saqlaydi.
 
-MathAcademy uchun bu ayniqsa muhim, chunki loyiha **allaqachon ishlaydi** va
+Ziyo uchun bu ayniqsa muhim, chunki loyiha **allaqachon ishlaydi** va
 **real xodimlar bilan real ma'lumot ustida** ishlaydi. Bu yerdagi ADR'larning
 bir qismi yangi qaror emas — **mavjud, ammo hech qachon aytilmagan qarorni**
 rasmiylashtiradi. Ular ikki xil:

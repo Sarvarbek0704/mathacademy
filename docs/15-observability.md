@@ -2,7 +2,7 @@
 
 > **Hujjat maqomi:** Qoralama · **Oxirgi yangilanish:** 2026-07-15
 > **Egasi:** Sarvarbek Sodiqov
-> **Loyiha:** MathAcademy Digital Campus · github.com/Sarvarbek0704/mathacademy
+> **Loyiha:** Ziyo · github.com/Sarvarbek0704/mathacademy
 
 **Bog'liq hujjatlar:**
 - [00-vision-and-market.md](./00-vision-and-market.md) — loyihaning o'lchangan holati

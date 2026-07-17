@@ -54,7 +54,7 @@ export default function GuardianLogin() {
             <AppLogoIcon size={72} />
           </div>
           <h1 className="text-4xl font-extrabold mb-4 tracking-tight">
-            Math<span style={{ color: 'rgba(255,255,255,0.7)' }}>Academy</span>
+            Ziyo
           </h1>
           <p className="text-base opacity-85 leading-relaxed">
             Farzandingizning baholar, davomat, intizom va to'lov holatini kuzatib boring.

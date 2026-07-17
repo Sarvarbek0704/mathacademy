@@ -1,6 +1,6 @@
 # 06 — Autentifikatsiya va RBAC
 
-> Bu hujjat MathAcademy'ning **kim tizimga kiradi** (autentifikatsiya) va **kim nimaga
+> Bu hujjat Ziyo'ning **kim tizimga kiradi** (autentifikatsiya) va **kim nimaga
 > ruxsatli** (avtorizatsiya) qatlamlarini tavsiflaydi. Har bir xavfsizlik da'vosi
 > mavjud kod bilan tasdiqlangan — fayl va qator ko'rsatilgan. Faraz qilinmagan.
 >

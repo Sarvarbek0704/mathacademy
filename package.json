@@ -1,5 +1,5 @@
 {
-  "name": "mathacademy-digital-campus",
+  "name": "ziyo",
   "private": true,
   "workspaces": [
     "apps/*",

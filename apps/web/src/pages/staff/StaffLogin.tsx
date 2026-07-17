@@ -61,7 +61,7 @@ export default function StaffLogin() {
             <AppLogoIcon size={72} />
           </div>
           <h1 className="text-4xl font-extrabold mb-4 tracking-tight">
-            Math<span className="text-indigo-300">Academy</span>
+            Ziyo
           </h1>
           <h2 className="text-xl font-semibold mb-3 opacity-90">Digital Campus</h2>
           <p className="text-base opacity-75 leading-relaxed">

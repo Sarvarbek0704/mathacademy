@@ -65,7 +65,7 @@ o'quvchi yo'nalishi → `track_subjects` har fanga `role` beradi → MAIN 93 +
 SECONDARY 63 + MANDATORY 3×11 = **189 ball**
 ([07-dtm-assessment-engine.md](../07-dtm-assessment-engine.md)).
 
-Ya'ni yetishmayotgani — chekka log jadvali emas. **MathAcademy'ni oddiy maktab
+Ya'ni yetishmayotgani — chekka log jadvali emas. **Ziyo'ni oddiy maktab
 tizimidan ajratib turadigan narsa** migratsiya tarixida **mavjud emas**.
 
 ### Buning ma'nosi

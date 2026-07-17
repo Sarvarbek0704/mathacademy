@@ -1,6 +1,6 @@
 # 11 — Infratuzilma (Infrastructure)
 
-> **Loyiha:** MathAcademy Digital Campus — ko'p ijarachilik (multi-tenant) SIS
+> **Loyiha:** Ziyo — ko'p ijarachilik (multi-tenant) SIS
 > **Hujjat holati:** mavjud infratuzilmani o'lchash va uni real ishlatishga yaroqli
 > holatga keltirish rejasi. Har bir narx **2026-yil iyul holatiga** veb-qidiruv bilan
 > tekshirilgan, manbasi berilgan. Narxlar o'zgaradi — qaror oldidan manbani qayta oching.
@@ -161,7 +161,7 @@ Manba: [Deploy for Free – Render Docs](https://render.com/docs/free). Sovuq st
 uchinchi tomon o'lchovlarida odatda **30–60 soniya**
 ([Kuberns 2026](https://kuberns.com/blogs/render-pricing/)).
 
-### 2.2 Bu MathAcademy uchun nimani anglatadi
+### 2.2 Bu Ziyo uchun nimani anglatadi
 
 | Vaqt | Nima bo'ladi |
 |---|---|
@@ -260,7 +260,7 @@ Manbalar: [Kun.uz 2026-03-27](https://kun.uz/news/2026/03/27/shaxsga-doir-ayrim-
 [Gazeta.uz 2026-03-28](https://www.gazeta.uz/oz/2026/03/28/personal-data/),
 [gov.uz — qonun matni](https://gov.uz/oz/advice/61/document/2116)
 
-**MathAcademy uchun:** avvalgi (2021–2026) rejimda Render'da o'quvchi ma'lumotini saqlash
+**Ziyo uchun:** avvalgi (2021–2026) rejimda Render'da o'quvchi ma'lumotini saqlash
 qonunbuzarlik bo'lishi mumkin edi. 2026-mart o'zgarishidan keyin — **ehtimol mumkin**,
 lekin shartlar bajarilganini **faqat yurist tasdiqlaydi** (13-bo'lim, 9–11-savollar).
 

@@ -2,7 +2,7 @@
 
 > **Hujjat maqomi:** Qoralama · **Oxirgi yangilanish:** 2026-07-15
 > **Egasi:** Sarvarbek Sodiqov
-> **Loyiha:** MathAcademy Digital Campus · github.com/Sarvarbek0704/mathacademy
+> **Loyiha:** Ziyo · github.com/Sarvarbek0704/mathacademy
 
 ---
 
@@ -10,7 +10,7 @@
 
 ### 1.1. Bir gapda
 
-**MathAcademy Digital Campus** — yotoqxonali DTM tayyorlov akademiyasini boshqarish
+**Ziyo** — yotoqxonali DTM tayyorlov akademiyasini boshqarish
 uchun qurilgan **ko'p ijarachilik (multi-tenant) Student Information System (SIS)**:
 o'quvchi, dars jadvali, baho, davomat, yotoqxona, ovqatlanish, intizom, to'lov va
 kirish natijalari — bitta tizimda.
@@ -196,7 +196,7 @@ Excel'da bu zanjirning har bir bo'g'ini **alohida faylda** yashaydi. Zanjirni ko
 uchun kimdir beshta faylni ochib, ismlarni qo'lda solishtirishi kerak. Amalda buni hech
 kim qilmaydi — shuning uchun muammo o'quvchi ketib qolgandan keyin aniqlanadi.
 
-MathAcademy'da bu zanjir modellashtirilgan: `attendance` → `discipline` →
+Ziyo'da bu zanjir modellashtirilgan: `attendance` → `discipline` →
 `student_risk_scores` → `notifications`, va hammasi `student_timeline` da bitta oqimda
 ko'rinadi. Xavf skori esa aniq qoida bilan hisoblanadi — `risk.service.ts` dagi
 `levelFromScore()`: **≤33 GREEN, ≤66 YELLOW, >66 RED**.
@@ -301,15 +301,15 @@ O'quv markazlari CRM bozorida raqiblar mavjud (kanon bo'yicha tekshirilgan):
 | **CRM Edu** (crm-edu.uz) | O'quv markazi CRM | Mavjud mijoz bazasi |
 | **univ.uz** | Ta'lim platformasi | Mavjud mijoz bazasi |
 
-**200+ markaz — bu WeWork'ning raqami, MathAcademy'niki emas.** Bu raqam bozorda
+**200+ markaz — bu WeWork'ning raqami, Ziyo'niki emas.** Bu raqam bozorda
 to'laydigan mijozlar borligini isbotlaydi, lekin **boshqa segmentda**.
 
 ### 4.3. Farq — nega ular to'g'ridan-to'g'ri raqib emas
 
 Bu tahlilning markaziy nuqtasi. Yuqoridagilar — **o'quv markazi (kurs markazi) CRM'i**.
-MathAcademy — **yotoqxonali tayyorlov akademiyasi SIS'i**. Bu ikki xil biznes.
+Ziyo — **yotoqxonali tayyorlov akademiyasi SIS'i**. Bu ikki xil biznes.
 
-| Domen ehtiyoji | Kurs markazi CRM (WeWork va h.k.) | MathAcademy |
+| Domen ehtiyoji | Kurs markazi CRM (WeWork va h.k.) | Ziyo |
 |---|---|---|
 | Lead / sotuv voronkasi | ✅ Asosiy funksiya | ❌ Yo'q — akademiyaga kirish imtihon orqali |
 | Davomat | ✅ Bor | ✅ Bor (`attendance`) |
@@ -367,7 +367,7 @@ ahamiyatsiz.
 ### 5.1. HEMIS — qo'llanilmaydi
 
 **HEMIS** (Higher Education Management Information System) — **oliy ta'lim muassasalari
-(OTM)** uchun majburiy davlat axborot tizimi. **MathAcademy'ga qo'llanilmaydi**: akademiya
+(OTM)** uchun majburiy davlat axborot tizimi. **Ziyo'ga qo'llanilmaydi**: akademiya
 OTM emas — u o'quvchini OTM'ga **tayyorlaydi**, lekin o'zi diplom bermaydi. HEMIS
 integratsiyasi TZ doirasidan tashqarida.
 
@@ -432,7 +432,7 @@ Bu detallar so'rovnomadan chiqmaydi — faqat o'sha hayotni yashagan odamda bo'l
 
 ### 6.2. Tizim allaqachon real ishlatiladi
 
-Raqiblar uchun eng qiyin narsa — **birinchi mijoz**. MathAcademy'da u bor.
+Raqiblar uchun eng qiyin narsa — **birinchi mijoz**. Ziyo'da u bor.
 
 | Nima | Nega muhim |
 |---|---|
@@ -483,7 +483,7 @@ bo'lishi mumkin — quyidagi sabablar bo'yicha.
 WeWork'da 200+ markaz bor. Bu shuni anglatadiki, ularda **sotuv mashinasi ishlaydi**:
 kim qo'ng'iroq qiladi, kim demo ko'rsatadi, kim shartnoma imzolaydi — hammasi ma'lum.
 
-MathAcademy'da: **nol**. Sotuvchi yo'q, marketing yo'q, veb-sayt yo'q, narx yo'q, demo
+Ziyo'da: **nol**. Sotuvchi yo'q, marketing yo'q, veb-sayt yo'q, narx yo'q, demo
 skripti yo'q. Ikkinchi akademiyaga qanday yetib borish rejasi yo'q.
 
 Bu texnik masala emas — kod yozib hal qilib bo'lmaydi. Muhandis uchun eng noqulay xavf

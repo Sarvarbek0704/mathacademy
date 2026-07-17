@@ -1,6 +1,6 @@
 # 08 — Analitika va Xavf Skori
 
-> **Status:** TZ (texnik topshiriq) · **Loyiha:** MathAcademy Digital Campus
+> **Status:** TZ (texnik topshiriq) · **Loyiha:** Ziyo
 > **Muallif:** Sarvarbek Sodiqov
 > **Kanon:** [`CANON.md`](./CANON.md) § 4.2
 >

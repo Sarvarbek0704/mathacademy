@@ -27,7 +27,7 @@ Shuning uchun qoida: **har da'vo o'lchanadi**, va o'lchov shu yerda yoziladi.
 
 | | |
 |---|---|
-| **Nomi** | MathAcademy Digital Campus |
+| **Nomi** | Ziyo |
 | **Repo** | github.com/Sarvarbek0704/mathacademy (PUBLIC) |
 | **Nima** | Ko'p ijarachilik (multi-tenant) Student Information System |
 | **Muallif** | Sarvarbek Sodiqov |

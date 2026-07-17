@@ -95,8 +95,7 @@ export function GuardianLayout() {
             >
               <AppLogoIcon size={32} className="shrink-0" />
               <div className="leading-tight">
-                <span className="font-extrabold text-sm tracking-tight">Math</span>
-                <span className="font-extrabold text-sm tracking-tight text-indigo-400">Academy</span>
+                <span className="font-extrabold text-sm tracking-tight">Ziyo</span>
               </div>
             </Link>
             <Link
@@ -198,8 +197,7 @@ export function GuardianLayout() {
             <div className="flex items-center gap-2.5">
               <AppLogoIcon size={28} />
               <div className="leading-tight">
-                <span className="font-extrabold text-sm tracking-tight">Math</span>
-                <span className="font-extrabold text-sm tracking-tight text-indigo-500">Academy</span>
+                <span className="font-extrabold text-sm tracking-tight">Ziyo</span>
               </div>
             </div>
           </div>

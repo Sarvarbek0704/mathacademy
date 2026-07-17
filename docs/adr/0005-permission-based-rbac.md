@@ -6,7 +6,7 @@
 
 ## Kontekst
 
-MathAcademy'da bir nechta xodim turi bor: superadmin, admin, teacher, receptionist,
+Ziyo'da bir nechta xodim turi bor: superadmin, admin, teacher, receptionist,
 accountant. Har biri tizimning turli qismlariga kiradi. Buxgalter to'lovni ko'radi,
 o'qituvchi baho qo'yadi, qabulxona xodimi o'quvchi qidiradi.
 

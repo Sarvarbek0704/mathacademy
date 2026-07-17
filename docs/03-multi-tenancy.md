@@ -9,7 +9,7 @@
 
 ## Bu hujjat nima uchun eng muhim
 
-MathAcademy — **demo emas**. Real akademiya, real xodimlar, real ota-onalar, real
+Ziyo — **demo emas**. Real akademiya, real xodimlar, real ota-onalar, real
 voyaga yetmagan o'quvchilarning ma'lumoti. Tizim hozir **bitta akademiya** uchun
 ishlaydi, lekin arxitekturasi **ko'p akademiya** uchun qurilgan (`tenant_id` hamma
 joyda bor). Ya'ni multi-tenancy bu loyihada **kelajakdagi reja emas — bugungi kod**.
@@ -34,7 +34,7 @@ unutish **imkonsiz** bo'ladigan qilib.
 ### 1.1. Muammo
 
 Bitta akademiya uchun tizim yozish oson: bitta database, bitta deploy, `WHERE`
-shartlarida hech qanday tenant yo'q. MathAcademy shunday boshlanmagan — u boshidan
+shartlarida hech qanday tenant yo'q. Ziyo shunday boshlanmagan — u boshidan
 `tenant_id` bilan qurilgan. Sabab: maqsad **mahsulot**, bitta mijoz emas.
 
 Ikkinchi akademiya qo'shilganda savol tug'iladi: **ularning ma'lumoti qayerda
@@ -61,7 +61,7 @@ mathacademy_db_akademiya_c
 | **Narxi — connection** | Har DB o'z pool ini talab qiladi. Node.js prosessi 100 pool × 10 ulanish = **1000 ulanish**. PostgreSQL default `max_connections` = 100 |
 | **Narxi — kod** | `PrismaService` endi yagona emas. Har request uchun to'g'ri `PrismaClient` topilishi kerak. `PrismaClient` og'ir obyekt — 100 ta instansiya xotirada |
 | **Narxi — cross-tenant hisobot** | "Barcha akademiyalarda nechta o'quvchi bor?" → 100 ta so'rov + qo'lda birlashtirish |
-| **Narxi — MathAcademy uchun** | 69 model, 2 migratsiya. Hozir yagona `PrismaService` (`apps/api/src/prisma/prisma.service.ts:14-38`). Bu yo'lga o'tish — **butun data qatlamini qayta yozish** |
+| **Narxi — Ziyo uchun** | 69 model, 2 migratsiya. Hozir yagona `PrismaService` (`apps/api/src/prisma/prisma.service.ts:14-38`). Bu yo'lga o'tish — **butun data qatlamini qayta yozish** |
 
 #### B) Schema-per-tenant
 
@@ -79,7 +79,7 @@ CREATE SCHEMA tenant_b;  -- tenant_b.students, tenant_b.groups ...
 | **Narxi — Prisma** | ⚠️ **Hal qiluvchi to'siq.** Prisma `multiSchema` ni qo'llaydi, lekin **statik** — `schema.prisma` da schema nomlari kompilyatsiya vaqtida yozilishi kerak. Dinamik "runtime da tenant schemasiga o'tish" Prisma da **qo'llab-quvvatlanmaydi** |
 | **Narxi — migratsiya** | 100 schema × 69 jadval = **6900 jadval**. `prisma migrate` buni boshqara olmaydi — har schema uchun qo'lda DDL |
 | **Narxi — `search_path` + pooling** | PgBouncer transaction mode da ulanish har tranzaksiyadan keyin qaytariladi. `SET search_path` **oqib ketadi** — keyingi so'rov noto'g'ri tenant schemasida ishlashi mumkin. Bu **jimgina** buziladi — eng yomon turdagi bag |
-| **Narxi — MathAcademy uchun** | Prisma 7.3 bilan amalda **imkonsiz**. Prisma dan voz kechish 37 294 qatorni qayta yozish demak |
+| **Narxi — Ziyo uchun** | Prisma 7.3 bilan amalda **imkonsiz**. Prisma dan voz kechish 37 294 qatorni qayta yozish demak |
 
 #### C) Shared database + `tenant_id` ustuni
 
@@ -2577,7 +2577,7 @@ qaytariladi.
 asosiy foydasi (ko'p qisqa so'rov → kam ulanish) **kamayadi**. Uzun tranzaksiya
 = uzoq band ulanish.
 
-⚠️ **MathAcademy da PgBouncer bormi — NOMA'LUM.** `prisma.service.ts:20-22`
+⚠️ **Ziyo da PgBouncer bormi — NOMA'LUM.** `prisma.service.ts:20-22`
 to'g'ridan-to'g'ri `DATABASE_URL` ga ulanadi (`PrismaPg` adapter). Deployment
 konfiguratsiyasi bu TZ ga kirmagan. **Ochiq savol (§10).**
 

@@ -6,7 +6,7 @@
 
 ## Kontekst
 
-MathAcademy pul bilan ishlaydi va bu **real pul**: ota-onalar har oy o'quv,
+Ziyo pul bilan ishlaydi va bu **real pul**: ota-onalar har oy o'quv,
 yotoqxona va ovqatlanish uchun to'laydi. `billing` moduli — loyihaning uchinchi
 eng katta servisi (1 610 qator).
 

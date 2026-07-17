@@ -1,6 +1,6 @@
 <div align="center">
 
-# MathAcademy Digital Campus
+# Ziyo
 
 **A multi-tenant Student Information System — running a real academy.**
 

@@ -8,7 +8,7 @@
 
 ## 0. Bu hujjat nima haqida
 
-MathAcademy'da pul — abstraksiya emas. Har oy ota-ona uchta narsa uchun to'laydi:
+Ziyo'da pul — abstraksiya emas. Har oy ota-ona uchta narsa uchun to'laydi:
 o'quv kursi, yotoqxona, ovqatlanish. Qabulxona xodimi tugmani bosadi, buxgalter
 hisobotni yopadi. Bu **bugun ishlaydi**.
 

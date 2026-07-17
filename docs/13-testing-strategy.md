@@ -1,6 +1,6 @@
 # 13 — Test strategiyasi (Testing Strategy)
 
-> **Loyiha:** MathAcademy Digital Campus — ko'p ijarachilik (multi-tenant) SIS
+> **Loyiha:** Ziyo — ko'p ijarachilik (multi-tenant) SIS
 > **Hujjat holati:** loyihalash bosqichi. **Hozirgi holat qismi — o'lchangan fakt.**
 > Test turlari va ustuvorliklar qat'iy; **vaqt va coverage raqamlari — maqsad,
 > birinchi o'lchovdan keyin tuzatiladi.**
@@ -292,12 +292,12 @@ aynan shu haqda.
 
 ### 4.1 Nisbat va nega u standartdan farq qiladi
 
-Klassik piramida: ko'p unit, ozroq integration, juda kam e2e. **MathAcademy'da
+Klassik piramida: ko'p unit, ozroq integration, juda kam e2e. **Ziyo'da
 bu nisbat noto'g'ri.**
 
 ```mermaid
 graph TB
-    subgraph "MathAcademy test taqsimoti"
+    subgraph "Ziyo test taqsimoti"
         E["E2E — ~5%<br/>Supertest, to'liq AppModule<br/>eng muhim oqimlar"]
         I["Integration — ~60%<br/>Testcontainers: real PostgreSQL<br/>tenant izolyatsiya, Prisma so'rovlar"]
         U["Unit — ~35%<br/>Jest: SOF mantiq<br/>DTM, Money, risk, login parsing"]
@@ -319,7 +319,7 @@ emas. Birinchi 20 test yozilgandan keyin bular qayta ko'riladi.
 
 Sabab bitta va u hal qiluvchi:
 
-> **MathAcademy mantiqining ko'pi Prisma so'rovlarining ichida yashaydi.**
+> **Ziyo mantiqining ko'pi Prisma so'rovlarining ichida yashaydi.**
 
 `students.service.ts` — 2079 qator. Uning ichida sof algoritm deyarli yo'q.
 Bor narsa — `where` bandlari, `include` daraxtlari, `$transaction` bloklari.
@@ -394,7 +394,7 @@ Xulosa:
 
 ### 4.4 Unit test — nima uchun (sof mantiq)
 
-Unit test **faqat I/O'siz sof funksiyalar** uchun. MathAcademy'da ular bor,
+Unit test **faqat I/O'siz sof funksiyalar** uchun. Ziyo'da ular bor,
 lekin ular **oz** — va aynan shuning uchun unit ulushi 35%.
 
 | Nima | Qayerda | Nega unit |
@@ -440,7 +440,7 @@ hal qiluvchi sabab** bor:
 
 > **Tenant izolyatsiyasi — ma'lumot bazasi darajasidagi xususiyat.**
 
-MathAcademy'da tenant izolyatsiyasi kodda emas. U — **`students` jadvalidagi
+Ziyo'da tenant izolyatsiyasi kodda emas. U — **`students` jadvalidagi
 `tenant_id` ustuni** va **so'rovdagi `WHERE tenant_id = $1`** bandi. Bu ikkovi
 DB'da uchrashadi. Mock bu uchrashuvni **simulyatsiya qilolmaydi** — u undan
 oldin javob qaytaradi.
@@ -1731,7 +1731,7 @@ describe('parseGuardianLogin', () => {
 
   describe('normalizatsiya', () => {
     it("slug kichik harfga o'tkaziladi", () => {
-      expect(parseGuardianLogin('MathAcademy-MA-0001')!.tenantSlug).toBe('mathacademy');
+      expect(parseGuardianLogin('Ziyo-MA-0001')!.tenantSlug).toBe('mathacademy');
     });
 
     it("loginId kichik harfga O'TKAZILMAYDI", () => {
@@ -2069,7 +2069,7 @@ it("o'quvchi guruhga biriktiriladi", async () => {
 
 Buni ochiq aytish kerak, chunki bu birinchi taklif bo'ladi.
 
-MathAcademy'da 80% coverage'ga **bir kunda** yetish mumkin: har servisga
+Ziyo'da 80% coverage'ga **bir kunda** yetish mumkin: har servisga
 mock qilingan Prisma bilan "smoke test" yozib chiqiladi. `collectCoverageFrom:
 ["**/*.(t|j)s"]` qatorlarni sanaydi va **80% chiqadi**.
 

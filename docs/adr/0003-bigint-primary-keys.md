@@ -18,7 +18,7 @@ bo'lishi mumkin. Bu ADR — o'sha urinishga javob.
 
 ### Nima uchun savol umuman tug'iladi
 
-MathAcademy **ko'p ijarachilik SIS**. 69 model, 165 ta foreign key. Har jadval
+Ziyo **ko'p ijarachilik SIS**. 69 model, 165 ta foreign key. Har jadval
 identifikator talab qiladi va tanlov haqiqiy: `Int`, `BigInt`, `UUID v4`, `UUIDv7`.
 
 Va bu — **oson qaytariladigan qaror emas**. PK tipini o'zgartirish 69 model,
@@ -251,7 +251,7 @@ tartiblangan**: birinchi 48 bit — Unix millisekund timestamp, qolgani tasodifi
 > narxi foydadan katta"** degani. Bu farqni yozish muhim: aks holda kelajakda
 > kimdir "biz UUIDv7 ni o'ylab ko'rmaganmiz" deb o'ylaydi. **O'ylab ko'rilgan.**
 >
-> ⚠️ **Bu qaror yangi loyiha uchun majburiy emas.** Agar MathAcademy'dan
+> ⚠️ **Bu qaror yangi loyiha uchun majburiy emas.** Agar Ziyo'dan
 > ajralgan yangi servis yozilsa — u UUIDv7 ni **erkin tanlashi mumkin**.
 > Bu ADR **mavjud 69 modelga** tegishli.
 
@@ -425,7 +425,7 @@ tartiblangan**: birinchi 48 bit — Unix millisekund timestamp, qolgani tasodifi
 | **Enumeration real hujumga aylansa** | `404` vs `403` farqi o'lchansa va u tenant xaritalashga yo'l bersa → javob kodlari birlashtiriladi (**ADR emas, bugfix**) |
 | **`/uploads` fayl nomlari taxmin qilinadigan bo'lsa** | Fayl yo'li `id` yoki ketma-ket sondan hosil bo'lsa → **fayl nomi UUID v4** ga o'tadi. ⚠️ Bu **PK qaroriga tegmaydi** — faqat fayl nomiga |
 | **Mijozda ID generatsiya qilish talab qilinsa** | Offline-first mobil ilova yoki optimistic UI kerak bo'lsa → **UUIDv7 qayta ko'riladi**. Autoincrement mijozda generatsiya qilinmaydi — bu printsipial chegara |
-| **Yangi mustaqil servis yozilsa** | MathAcademy'dan ajralgan servis → bu ADR **majburiy emas**, UUIDv7 erkin tanlanadi |
+| **Yangi mustaqil servis yozilsa** | Ziyo'dan ajralgan servis → bu ADR **majburiy emas**, UUIDv7 erkin tanlanadi |
 | **`BigInt` toshib ketish yaqinlashsa** | `attendance_marks` yoki `audit_logs` da `last_value` **2⁶²** dan oshsa → bu amalda hech qachon bo'lmaydi (2⁶³ ≈ 9.2 × 10¹⁸). **Bu signal hech qachon yonmaydi va shu yaxshi** |
 | **Prisma UUIDv7 ni native qo'llasa + yangi loyiha** | `@default(uuid(7))` rasmiy bo'lsa → **mavjud 69 model baribir o'zgarmaydi**. Migratsiya narxi bu qarorning asosi, va Prisma qo'llashi u narxni kamaytirmaydi |
 | **Kanon §5.2 tuzatilsa** | Bu ADR o'lchagan fakt (28 nusxa `toBigInt`, 2 ta o'lik fayl) kanonga kirsa → bu ADR §Oqibatlar yangilanadi |

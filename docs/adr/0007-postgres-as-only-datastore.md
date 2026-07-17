@@ -6,7 +6,7 @@
 
 ## Kontekst
 
-MathAcademy'da ikkita narsa an'anaviy ravishda Redis talab qiladi:
+Ziyo'da ikkita narsa an'anaviy ravishda Redis talab qiladi:
 
 1. **Brute-force himoyasi** — login urinishlarini sanash va akkauntni bloklash.
    Klassik yechim: `INCR` + `EXPIRE`
